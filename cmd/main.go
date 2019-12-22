@@ -11,7 +11,6 @@ func main() {
 	demo.HideVersion = true
 
 	demo.Add(example(), "name", "description")
-
 	demo.Run()
 }
 
