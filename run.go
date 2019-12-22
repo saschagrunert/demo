@@ -3,6 +3,7 @@ package demo
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -21,17 +22,45 @@ const bash = "bash"
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
 type Run struct {
+	title       string
 	description []string
 	steps       []step
+	out         io.Writer
+	options     *Options
 }
 
 type step struct {
+	r             *Run
 	text, command []string
 }
 
+// Options specify the run options
+type Options struct {
+	AutoTimeout time.Duration
+	Auto        bool
+	Immediate   bool
+	SkipSteps   int
+}
+
 // NewRun creates a new run for the provided description string
-func NewRun(description ...string) *Run {
-	return &Run{description, nil}
+func NewRun(title string, description ...string) *Run {
+	return &Run{
+		title:       title,
+		description: description,
+		steps:       nil,
+		out:         os.Stdout,
+		options:     nil,
+	}
+}
+
+// optionsFrom creates a new set of options from the provided context
+func optionsFrom(ctx *cli.Context) Options {
+	return Options{
+		AutoTimeout: ctx.Duration("auto-timeout"),
+		Auto:        ctx.Bool("auto"),
+		Immediate:   ctx.Bool("immediate"),
+		SkipSteps:   ctx.Int("skip-steps"),
+	}
 }
 
 // S is a short-hand for converting string slice syntaxes
@@ -39,62 +68,97 @@ func S(s ...string) []string {
 	return s
 }
 
-// Step creates a new step on the provided run
-func (r *Run) Step(text, command []string) {
-	r.steps = append(r.steps, step{text, command})
+// SetOutput can be used to replace the default output for the Run
+func (r *Run) SetOutput(output io.Writer) error {
+	if output == nil {
+		return errors.New("provided output is nil")
+	}
+	r.out = output
+	return nil
 }
 
-// Run executes the run
+// Step creates a new step on the provided run
+func (r *Run) Step(text, command []string) {
+	r.steps = append(r.steps, step{r, text, command})
+}
+
+// Run executes the run in the provided CLI context
 func (r *Run) Run(ctx *cli.Context) error {
-	r.printTitleAndDescription()
+	return r.RunWithOptions(optionsFrom(ctx))
+}
+
+// RunWithOptions executes the run with the provided Options
+func (r *Run) RunWithOptions(opts Options) error {
+	r.options = &opts
+
+	if err := r.printTitleAndDescription(); err != nil {
+		return err
+	}
 	for i, step := range r.steps {
-		if ctx.Int("skip-steps") > i {
+		if r.options.SkipSteps > i {
 			continue
 		}
-		if err := step.run(ctx, i+1, len(r.steps)); err != nil {
+		if err := step.run(i+1, len(r.steps)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *Run) printTitleAndDescription() {
-	for i, d := range r.description {
-		if i == 0 {
-			color.Cyan.Println(d)
-			for range d {
-				color.Cyan.Print("=")
-			}
-			fmt.Printf("\n")
-		} else {
-			color.White.Darken().Println(d)
+func (r *Run) printTitleAndDescription() error {
+	if err := write(r.out, color.Cyan.Sprintf("%s\n", r.title)); err != nil {
+		return err
+	}
+	for range r.title {
+		if err := write(r.out, color.Cyan.Sprint("=")); err != nil {
+			return err
 		}
 	}
-}
-
-func Ensure(commands ...string) {
-	for _, c := range commands {
-		cmd := exec.Command(bash, "-c", c)
-		cmd.Stderr = nil
-		cmd.Stdout = nil
-		_ = cmd.Run() // nolint: errcheck
+	if err := write(r.out, "\n"); err != nil {
+		return err
 	}
-}
-
-func (s *step) run(ctx *cli.Context, current, max int) error {
-	if err := waitOrSleep(ctx); err != nil {
-		return errors.Wrapf(err, "unable to run step: %v", s)
-	}
-	if len(s.text) > 0 {
-		s.echo(ctx, current, max)
-	}
-	if len(s.command) > 0 {
-		return s.execute(ctx)
+	for _, d := range r.description {
+		if err := write(
+			r.out, color.White.Darken().Sprintf("%s\n", d),
+		); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (s *step) echo(ctx *cli.Context, current, max int) {
+func write(w io.Writer, str string) error {
+	_, err := w.Write([]byte(str))
+	return err
+}
+
+// Ensure executes the provided commands in order
+func Ensure(commands ...string) error {
+	for _, c := range commands {
+		cmd := exec.Command(bash, "-c", c)
+		cmd.Stderr = nil
+		cmd.Stdout = nil
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *step) run(current, max int) error {
+	if err := s.waitOrSleep(); err != nil {
+		return errors.Wrapf(err, "unable to run step: %v", s)
+	}
+	if len(s.text) > 0 {
+		s.echo(current, max)
+	}
+	if len(s.command) > 0 {
+		return s.execute()
+	}
+	return nil
+}
+
+func (s *step) echo(current, max int) {
 	prepared := []string{" "}
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
@@ -110,46 +174,56 @@ func (s *step) echo(ctx *cli.Context, current, max int) {
 			prepared = append(prepared, m)
 		}
 	}
-	print(ctx, prepared...)
+	s.print(prepared...)
 }
 
-func (s *step) execute(ctx *cli.Context) error {
+func (s *step) execute() error {
 	joinedCommand := strings.Join(s.command, " ")
 	cmd := exec.Command(bash, "-c", joinedCommand)
 
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
+	cmd.Stderr = s.r.out
+	cmd.Stdout = s.r.out
 
 	cmdString := color.Green.Sprintf("> %s", strings.Join(s.command, " \\\n    "))
-	print(ctx, cmdString)
-	if err := waitOrSleep(ctx); err != nil {
+	s.print(cmdString)
+	if err := s.waitOrSleep(); err != nil {
 		return errors.Wrapf(err, "unable to execute step: %v", s)
 	}
 	return errors.Wrap(cmd.Run(), "step command failed")
 }
 
-func print(ctx *cli.Context, msg ...string) {
+func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		for _, c := range m {
-			if !ctx.Bool("immediate") {
+			if !s.r.options.Immediate {
 				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond)
 			}
-			fmt.Printf("%c", c)
+			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {
+				return err
+			}
 		}
-		println()
+		if err := write(s.r.out, "\n"); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func waitOrSleep(ctx *cli.Context) error {
-	if ctx.Bool("auto") {
-		time.Sleep(ctx.Duration("auto-timeout"))
+func (s *step) waitOrSleep() error {
+	if s.r.options.Auto {
+		time.Sleep(s.r.options.AutoTimeout)
 	} else {
-		fmt.Print("…")
+		if err := write(s.r.out, "…"); err != nil {
+			return err
+		}
 		_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
 		if err != nil {
 			return errors.Wrap(err, "unable to read newline")
 		}
-		fmt.Printf("\x1b[1A") // Move cursor up again
+		// Move cursor up again
+		if err := write(s.r.out, "\x1b[1A"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
