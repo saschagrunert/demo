@@ -1,7 +1,7 @@
 package main
 
 import (
-	. "github.com/saschagrunert/demo"
+	. "github.com/saschagrunert/demo" // nolint
 )
 
 func main() {

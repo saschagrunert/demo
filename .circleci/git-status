@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+STATUS=$(git status --porcelain)
+if [[ -z $STATUS ]]; then
+    echo "tree is clean"
+else
+    printf "tree is dirty, please commit all changes\n$STATUS"
+    exit 1
+fi

@@ -2,6 +2,7 @@ package demo
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"time"
@@ -125,14 +126,16 @@ func (d *Demo) Run() {
 	go func() {
 		for range c {
 			if d.Cleanup != nil {
-				_ = d.Cleanup(nil)
+				if err := d.Cleanup(nil); err != nil {
+					log.Printf("unable to cleanup: %v", err)
+				}
 			}
 			os.Exit(0)
 		}
 	}()
 
 	if err := d.App.Run(os.Args); err != nil {
-		fmt.Printf("run failed: %v", err)
+		log.Printf("run failed: %v", err)
 		os.Exit(1)
 	}
 }

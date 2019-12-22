@@ -14,8 +14,12 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// Every command will be executed in a new bash subshell. This is the only
+// external dependency we need
 const bash = "bash"
 
+// Run is an abstraction for one part of the Demo. A demo can contain multiple
+// runs.
 type Run struct {
 	description []string
 	steps       []step
@@ -25,18 +29,22 @@ type step struct {
 	text, command []string
 }
 
+// NewRun creates a new run for the provided description string
 func NewRun(description ...string) *Run {
 	return &Run{description, nil}
 }
 
+// S is a short-hand for converting string slice syntaxes
 func S(s ...string) []string {
 	return s
 }
 
-func (r *Run) Step(text []string, command []string) {
+// Step creates a new step on the provided run
+func (r *Run) Step(text, command []string) {
 	r.steps = append(r.steps, step{text, command})
 }
 
+// Run executes the run
 func (r *Run) Run(ctx *cli.Context) error {
 	r.printTitleAndDescription()
 	for i, step := range r.steps {
@@ -69,7 +77,7 @@ func Ensure(commands ...string) {
 		cmd := exec.Command(bash, "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
-		_ = cmd.Run()
+		_ = cmd.Run() // nolint: errcheck
 	}
 }
 
