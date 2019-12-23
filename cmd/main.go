@@ -64,6 +64,8 @@ func example() *Run {
 	// Commands do not need to have a description, so we could set it to `nil`
 	r.Step(nil, S(
 		"echo without description",
+		"but this can be executed in",
+		"multiple lines as well",
 	))
 
 	// It is also not needed at all to provide a command
