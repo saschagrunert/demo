@@ -1,10 +1,13 @@
 package demo_test
 
 import (
+	"flag"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/urfave/cli/v2"
+
 	"github.com/saschagrunert/demo"
 )
 
@@ -72,5 +75,21 @@ var _ = t.Describe("Run", func() {
 
 		// Then
 		Expect(err).NotTo(BeNil())
+	})
+
+	It("should succeed to run from a cli context", func() {
+		// Given
+		app := cli.NewApp()
+		flagSet := &flag.FlagSet{}
+		flagSet.Bool(demo.FlagAuto, true, "")
+		flagSet.Bool(demo.FlagImmediate, true, "")
+
+		ctx := cli.NewContext(app, flagSet, nil)
+
+		// When
+		err := sut.Run(ctx)
+
+		// Then
+		Expect(err).To(BeNil())
 	})
 })
