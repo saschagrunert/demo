@@ -22,40 +22,49 @@ type runFlag struct {
 	flag cli.Flag
 }
 
+const (
+	FlagAll          = "all"
+	FlagAuto         = "auto"
+	FlagAutoTimeout  = "auto-timeout"
+	FlagContinuously = "continuously"
+	FlagImmediate    = "immediate"
+	FlagSkipSteps    = "skip-steps"
+)
+
 func New() *Demo {
 	app := cli.NewApp()
 	app.UseShortOptionHandling = true
 
 	app.Flags = []cli.Flag{
 		&cli.BoolFlag{
-			Name:    "all",
+			Name:    FlagAll,
 			Aliases: []string{"l"},
 			Usage:   "run all demos",
 		},
 		&cli.BoolFlag{
-			Name:    "auto",
+			Name:    FlagAuto,
 			Aliases: []string{"a"},
 			Usage: "run the demo in automatic mode, " +
 				"where every step gets executed automatically",
 		},
 		&cli.DurationFlag{
-			Name:    "auto-timeout",
+			Name:    FlagAutoTimeout,
 			Aliases: []string{"t"},
 			Usage:   "the timeout to be waited when `auto` is enabled",
 			Value:   3 * time.Second,
 		},
 		&cli.BoolFlag{
-			Name:    "continuously",
+			Name:    FlagContinuously,
 			Aliases: []string{"c"},
 			Usage:   "run the demos continuously without any end",
 		},
 		&cli.BoolFlag{
-			Name:    "immediate",
+			Name:    FlagImmediate,
 			Aliases: []string{"i"},
 			Usage:   "immediately output without the typewriter animation",
 		},
 		&cli.IntFlag{
-			Name:    "skip-steps",
+			Name:    FlagSkipSteps,
 			Aliases: []string{"s"},
 			Usage:   "skip the amount of initial steps within the demo",
 		},
@@ -73,7 +82,7 @@ func New() *Demo {
 					isSet = true
 				}
 			}
-			if ctx.Bool("all") || isSet {
+			if ctx.Bool(FlagAll) || isSet {
 				runFns = append(runFns, x.run.Run)
 			}
 		}
@@ -96,7 +105,7 @@ func New() *Demo {
 			}
 			return nil
 		}
-		if ctx.Bool("continuously") {
+		if ctx.Bool(FlagContinuously) {
 			for {
 				if err := runSelected(); err != nil {
 					return err

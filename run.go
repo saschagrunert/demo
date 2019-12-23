@@ -56,10 +56,10 @@ func NewRun(title string, description ...string) *Run {
 // optionsFrom creates a new set of options from the provided context
 func optionsFrom(ctx *cli.Context) Options {
 	return Options{
-		AutoTimeout: ctx.Duration("auto-timeout"),
-		Auto:        ctx.Bool("auto"),
-		Immediate:   ctx.Bool("immediate"),
-		SkipSteps:   ctx.Int("skip-steps"),
+		AutoTimeout: ctx.Duration(FlagAutoTimeout),
+		Auto:        ctx.Bool(FlagAuto),
+		Immediate:   ctx.Bool(FlagImmediate),
+		SkipSteps:   ctx.Int(FlagSkipSteps),
 	}
 }
 
@@ -130,19 +130,6 @@ func (r *Run) printTitleAndDescription() error {
 func write(w io.Writer, str string) error {
 	_, err := w.Write([]byte(str))
 	return err
-}
-
-// Ensure executes the provided commands in order
-func Ensure(commands ...string) error {
-	for _, c := range commands {
-		cmd := exec.Command(bash, "-c", c)
-		cmd.Stderr = nil
-		cmd.Stdout = nil
-		if err := cmd.Run(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *step) run(current, max int) error {
