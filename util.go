@@ -5,6 +5,7 @@ import (
 )
 
 // Ensure executes the provided commands in order
+// This utility function can be used during setup or cleanup
 func Ensure(commands ...string) error {
 	for _, c := range commands {
 		cmd := exec.Command(bash, "-c", c)
