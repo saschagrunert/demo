@@ -5,7 +5,7 @@
 
 ![demo](.github/demo.svg)
 
-### A framework for performing command line demos in the wild
+### A framework for performing live pre-recorded command line demos in the wild 📼
 
 Recording command line demos can be a difficult topic these days. Doing a video
 record has the drawback of lacking flexibility and reduced interactivity during
