@@ -3,6 +3,8 @@
 [![CircleCI](https://circleci.com/gh/saschagrunert/demo.svg?style=shield)](https://circleci.com/gh/saschagrunert/demo)
 [![codecov](https://codecov.io/gh/saschagrunert/demo/branch/master/graph/badge.svg)](https://codecov.io/gh/saschagrunert/demo)
 
+![demo](.github/demo.svg)
+
 ### A framework for performing command line demos in the wild
 
 Recording command line demos can be a difficult topic these days. Doing a video
