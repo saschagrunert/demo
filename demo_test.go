@@ -37,20 +37,10 @@ var _ = t.Describe("Demo", func() {
 				"This is a possible",
 				"description of the command",
 				"to be executed",
-			), demo.S(
-				"echo hello world",
-			))
+			), demo.S("echo hello world"))
 
-			// Commands to not need to have a description
-			r.Step(nil, demo.S(
-				"echo without description",
-			))
-
-			// It is also not needed to provide a command
-			r.Step(demo.S(
-				"Just a description without a command",
-			), nil)
-
+			r.Step(nil, demo.S("echo without description"))
+			r.Step(demo.S("Just a description without a command"), nil)
 			return r
 		}
 		sut := demo.New()
