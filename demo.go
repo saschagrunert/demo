@@ -13,8 +13,8 @@ import (
 type Demo struct {
 	*cli.App
 	runs    []*runFlag
-	Setup   func(*cli.Context) error
-	Cleanup func(*cli.Context) error
+	setup   func(*cli.Context) error
+	cleanup func(*cli.Context) error
 }
 
 type runFlag struct {
@@ -70,7 +70,13 @@ func New() *Demo {
 		},
 	}
 
-	demo := &Demo{App: app, runs: nil}
+	emptyFn := func(*cli.Context) error { return nil }
+	demo := &Demo{
+		App:     app,
+		runs:    nil,
+		setup:   emptyFn,
+		cleanup: emptyFn,
+	}
 
 	app.Action = func(ctx *cli.Context) error {
 		runFns := []cli.ActionFunc{}
@@ -89,18 +95,14 @@ func New() *Demo {
 
 		runSelected := func() error {
 			for _, runFn := range runFns {
-				if demo.Setup != nil {
-					if err := demo.Setup(ctx); err != nil {
-						return err
-					}
+				if err := demo.setup(ctx); err != nil {
+					return err
 				}
 				if err := runFn(ctx); err != nil {
 					return err
 				}
-				if demo.Cleanup != nil {
-					if err := demo.Cleanup(nil); err != nil {
-						return err
-					}
+				if err := demo.cleanup(ctx); err != nil {
+					return err
 				}
 			}
 			return nil
@@ -116,6 +118,16 @@ func New() *Demo {
 	}
 
 	return demo
+}
+
+// SetSetup sets the cleanup function called before each run
+func (d *Demo) Setup(setupFn func(*cli.Context) error) {
+	d.setup = setupFn
+}
+
+// SetCleanup sets the cleanup function called after each run
+func (d *Demo) Cleanup(cleanupFn func(*cli.Context) error) {
+	d.cleanup = cleanupFn
 }
 
 func (d *Demo) Add(run *Run, name, description string) {
@@ -134,10 +146,8 @@ func (d *Demo) Run() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for range c {
-			if d.Cleanup != nil {
-				if err := d.Cleanup(nil); err != nil {
-					log.Printf("unable to cleanup: %v", err)
-				}
+			if err := d.cleanup(nil); err != nil {
+				log.Printf("unable to cleanup: %v", err)
 			}
 			os.Exit(0)
 		}

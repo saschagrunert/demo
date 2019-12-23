@@ -4,19 +4,17 @@ import (
 	"os"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/urfave/cli/v2"
 
 	"github.com/saschagrunert/demo"
 )
 
 var _ = t.Describe("Demo", func() {
-	BeforeEach(func() {
-		os.Args = []string{
-			"demo", "--auto", "--immediate",
-		}
-	})
 
 	It("should succeed to run", func() {
 		// Given
+		os.Args = []string{"demo"}
 		sut := demo.New()
 
 		// When
@@ -25,6 +23,9 @@ var _ = t.Describe("Demo", func() {
 
 	It("should succeed to run with example", func() {
 		// Given
+		os.Args = []string{
+			"demo", "--auto", "--auto-timeout=0", "--immediate", "-0",
+		}
 		example := func() *demo.Run {
 			r := demo.NewRun(
 				"Title",
@@ -55,7 +56,23 @@ var _ = t.Describe("Demo", func() {
 		sut := demo.New()
 		sut.Add(example(), "title", "description")
 
+		type success struct{ setup, cleanup bool }
+		succeed := &success{}
+
+		sut.Setup(func(*cli.Context) error {
+			succeed.setup = true
+			return nil
+		})
+		sut.Cleanup(func(*cli.Context) error {
+			succeed.cleanup = true
+			return nil
+		})
+
 		// When
 		sut.Run()
+
+		// Then
+		Expect(succeed.setup).To(BeTrue())
+		Expect(succeed.cleanup).To(BeTrue())
 	})
 })
