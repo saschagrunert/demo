@@ -19,8 +19,8 @@ command line!
 
 # Usage
 
-Every "demo" is a stand-alone command line application which consists of
-multiple "runs". For example, if we create a demo like this:
+Every _demo_ is a stand-alone command line application which consist of
+multiple _runs_. For example, if we create a demo like this:
 
 ```go
 package main
@@ -34,7 +34,7 @@ func main() {
 }
 ```
 
-Then this demo already contains features like autoplay. We can verify this
+Then this demo already contains features like _auto-play_. We can verify this
 checking the help output of the executable:
 
 ```
