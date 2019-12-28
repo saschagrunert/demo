@@ -14,7 +14,7 @@ define go-build
 endef
 
 all:
-	$(GO) build ./...
+	$(call go-build,./cmd)
 
 .PHONY: clean
 clean:
