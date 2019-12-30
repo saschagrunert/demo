@@ -49,12 +49,12 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-golangci-lint-{{ checksum "go.sum" }}
+            - v2-golangci-lint-{{ checksum "go.sum" }}
       - run:
           name: lint
           command: make lint
       - save_cache:
-          key: v1-golangci-lint-{{ checksum "go.sum" }}
+          key: v2-golangci-lint-{{ checksum "go.sum" }}
           paths:
             - *gocache
 
