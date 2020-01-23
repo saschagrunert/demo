@@ -68,6 +68,21 @@ var _ = t.Describe("Run", func() {
 		Expect(out).To(ContainSubstring(command))
 	})
 
+	It("should succeed to run with step which can fail", func() {
+		// Given
+		const (
+			descriptionText = "Description Text"
+			command         = "exit 1"
+		)
+		sut.StepCanFail(demo.S(descriptionText), demo.S(command))
+
+		// When
+		err := sut.RunWithOptions(opts)
+
+		// Then
+		Expect(err).To(BeNil())
+	})
+
 	It("should fail to set nil output", func() {
 		// Given
 		// When

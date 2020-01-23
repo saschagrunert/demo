@@ -32,6 +32,7 @@ type Run struct {
 type step struct {
 	r             *Run
 	text, command []string
+	canFail       bool
 }
 
 // Options specify the run options
@@ -79,7 +80,12 @@ func (r *Run) SetOutput(output io.Writer) error {
 
 // Step creates a new step on the provided run
 func (r *Run) Step(text, command []string) {
-	r.steps = append(r.steps, step{r, text, command})
+	r.steps = append(r.steps, step{r, text, command, false})
+}
+
+// StepCanFail creates a new step which can fail on execution
+func (r *Run) StepCanFail(text, command []string) {
+	r.steps = append(r.steps, step{r, text, command, true})
 }
 
 // Run executes the run in the provided CLI context
@@ -176,7 +182,11 @@ func (s *step) execute() error {
 	if err := s.waitOrSleep(); err != nil {
 		return errors.Wrapf(err, "unable to execute step: %v", s)
 	}
-	return errors.Wrap(cmd.Run(), "step command failed")
+	err := cmd.Run()
+	if s.canFail {
+		return nil
+	}
+	return errors.Wrap(err, "step command failed")
 }
 
 func (s *step) print(msg ...string) error {
