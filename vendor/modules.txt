@@ -1,6 +1,6 @@
 # github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d
 github.com/cpuguy83/go-md2man/v2/md2man
-# github.com/gookit/color v1.2.0
+# github.com/gookit/color v1.2.2
 github.com/gookit/color
 # github.com/hpcloud/tail v1.0.0
 github.com/hpcloud/tail
@@ -47,13 +47,13 @@ github.com/onsi/gomega/matchers/support/goraph/edge
 github.com/onsi/gomega/matchers/support/goraph/node
 github.com/onsi/gomega/matchers/support/goraph/util
 github.com/onsi/gomega/types
-# github.com/pkg/errors v0.8.1
+# github.com/pkg/errors v0.9.1
 github.com/pkg/errors
 # github.com/russross/blackfriday/v2 v2.0.1
 github.com/russross/blackfriday/v2
 # github.com/shurcooL/sanitized_anchor_name v1.0.0
 github.com/shurcooL/sanitized_anchor_name
-# github.com/urfave/cli/v2 v2.0.0
+# github.com/urfave/cli/v2 v2.1.1
 github.com/urfave/cli/v2
 # golang.org/x/net v0.0.0-20180906233101-161cd47e91fd
 golang.org/x/net/html

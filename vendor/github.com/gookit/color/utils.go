@@ -7,6 +7,19 @@ import (
 	"strings"
 )
 
+// Support color:
+// 	"TERM=xterm"
+// 	"TERM=xterm-vt220"
+// 	"TERM=xterm-256color"
+// 	"TERM=screen-256color"
+// 	"TERM=rxvt-unicode-256color"
+// Don't support color:
+// 	"TERM=cygwin"
+var specialColorTerms = map[string]bool{
+	"screen-256color":       true,
+	"rxvt-unicode-256color": true,
+}
+
 // IsConsole 判断 w 是否为 stderr、stdout、stdin 三者之一
 func IsConsole(out io.Writer) bool {
 	o, ok := out.(*os.File)
@@ -34,11 +47,13 @@ func IsMSys() bool {
 // Not support:
 // 	windows cmd.exe, powerShell.exe
 func IsSupportColor() bool {
-	// "TERM=xterm"  support color
-	// "TERM=xterm-vt220" support color
-	// "TERM=xterm-256color" support color
-	// "TERM=cygwin" don't support color
-	if strings.Contains(os.Getenv("TERM"), "xterm") {
+	envTerm := os.Getenv("TERM")
+	if strings.Contains(envTerm, "xterm") {
+		return true
+	}
+
+	// it's special color term
+	if _, ok := specialColorTerms[envTerm]; ok {
 		return true
 	}
 
@@ -58,7 +73,15 @@ func IsSupportColor() bool {
 // IsSupport256Color render
 func IsSupport256Color() bool {
 	// "TERM=xterm-256color"
+	// "TERM=screen-256color"
+	// "TERM=rxvt-unicode-256color"
 	return strings.Contains(os.Getenv("TERM"), "256color")
+}
+
+// IsSupportTrueColor render. IsSupportRGBColor
+func IsSupportTrueColor() bool {
+	// "COLORTERM=truecolor"
+	return strings.Contains(os.Getenv("COLORTERM"), "truecolor")
 }
 
 // its Win system. linux windows darwin
