@@ -27,6 +27,8 @@ type Run struct {
 	steps       []step
 	out         io.Writer
 	options     *Options
+	setup       func() error
+	cleanup     func() error
 }
 
 type step struct {
@@ -43,6 +45,8 @@ type Options struct {
 	SkipSteps   int
 }
 
+func emptyFn() error { return nil }
+
 // NewRun creates a new run for the provided description string
 func NewRun(title string, description ...string) *Run {
 	return &Run{
@@ -51,6 +55,8 @@ func NewRun(title string, description ...string) *Run {
 		steps:       nil,
 		out:         os.Stdout,
 		options:     nil,
+		setup:       emptyFn,
+		cleanup:     emptyFn,
 	}
 }
 
@@ -78,6 +84,16 @@ func (r *Run) SetOutput(output io.Writer) error {
 	return nil
 }
 
+// Setup sets the cleanup function called before this run
+func (r *Run) Setup(setupFn func() error) {
+	r.setup = setupFn
+}
+
+// Cleanup sets the cleanup function called after this run
+func (r *Run) Cleanup(cleanupFn func() error) {
+	r.cleanup = cleanupFn
+}
+
 // Step creates a new step on the provided run
 func (r *Run) Step(text, command []string) {
 	r.steps = append(r.steps, step{r, text, command, false})
@@ -95,6 +111,10 @@ func (r *Run) Run(ctx *cli.Context) error {
 
 // RunWithOptions executes the run with the provided Options
 func (r *Run) RunWithOptions(opts Options) error {
+	if err := r.setup(); err != nil {
+		return err
+	}
+
 	r.options = &opts
 
 	if err := r.printTitleAndDescription(); err != nil {
@@ -108,7 +128,7 @@ func (r *Run) RunWithOptions(opts Options) error {
 			return err
 		}
 	}
-	return nil
+	return r.cleanup()
 }
 
 func (r *Run) printTitleAndDescription() error {

@@ -120,12 +120,12 @@ func New() *Demo {
 	return demo
 }
 
-// SetSetup sets the cleanup function called before each run
+// Setup sets the cleanup function called before each run
 func (d *Demo) Setup(setupFn func(*cli.Context) error) {
 	d.setup = setupFn
 }
 
-// SetCleanup sets the cleanup function called after each run
+// Cleanup sets the cleanup function called after each run
 func (d *Demo) Cleanup(cleanupFn func(*cli.Context) error) {
 	d.cleanup = cleanupFn
 }
