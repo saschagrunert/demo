@@ -17,3 +17,10 @@ func Ensure(commands ...string) error {
 	}
 	return nil
 }
+
+// MustEnsure executes the provided commands in order and panics on failure
+func MustEnsure(commands ...string) {
+	if err := Ensure(commands...); err != nil {
+		panic(err)
+	}
+}
