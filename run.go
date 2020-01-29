@@ -39,10 +39,11 @@ type step struct {
 
 // Options specify the run options
 type Options struct {
-	AutoTimeout time.Duration
-	Auto        bool
-	Immediate   bool
-	SkipSteps   int
+	AutoTimeout      time.Duration
+	Auto             bool
+	HideDescriptions bool
+	Immediate        bool
+	SkipSteps        int
 }
 
 func emptyFn() error { return nil }
@@ -63,10 +64,11 @@ func NewRun(title string, description ...string) *Run {
 // optionsFrom creates a new set of options from the provided context
 func optionsFrom(ctx *cli.Context) Options {
 	return Options{
-		AutoTimeout: ctx.Duration(FlagAutoTimeout),
-		Auto:        ctx.Bool(FlagAuto),
-		Immediate:   ctx.Bool(FlagImmediate),
-		SkipSteps:   ctx.Int(FlagSkipSteps),
+		AutoTimeout:      ctx.Duration(FlagAutoTimeout),
+		Auto:             ctx.Bool(FlagAuto),
+		HideDescriptions: ctx.Bool(FlagHideDescriptions),
+		Immediate:        ctx.Bool(FlagImmediate),
+		SkipSteps:        ctx.Int(FlagSkipSteps),
 	}
 }
 
@@ -143,10 +145,15 @@ func (r *Run) printTitleAndDescription() error {
 	if err := write(r.out, "\n"); err != nil {
 		return err
 	}
-	for _, d := range r.description {
-		if err := write(
-			r.out, color.White.Darken().Sprintf("%s\n", d),
-		); err != nil {
+	if !r.options.HideDescriptions {
+		for _, d := range r.description {
+			if err := write(
+				r.out, color.White.Darken().Sprintf("%s\n", d),
+			); err != nil {
+				return err
+			}
+		}
+		if err := write(r.out, "\n"); err != nil {
 			return err
 		}
 	}
@@ -162,7 +169,7 @@ func (s *step) run(current, max int) error {
 	if err := s.waitOrSleep(); err != nil {
 		return errors.Wrapf(err, "unable to run step: %v", s)
 	}
-	if len(s.text) > 0 {
+	if len(s.text) > 0 && !s.r.options.HideDescriptions {
 		s.echo(current, max)
 	}
 	if len(s.command) > 0 {
@@ -172,7 +179,7 @@ func (s *step) run(current, max int) error {
 }
 
 func (s *step) echo(current, max int) {
-	prepared := []string{" "}
+	prepared := []string{}
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
 			prepared = append(
@@ -206,6 +213,7 @@ func (s *step) execute() error {
 	if s.canFail {
 		return nil
 	}
+	s.print("")
 	return errors.Wrap(err, "step command failed")
 }
 

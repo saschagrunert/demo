@@ -56,6 +56,7 @@ GLOBAL OPTIONS:
    --auto-timeout auto, -t auto  the timeout to be waited when auto is enabled (default: 3s)
    --continuously, -c            run the demos continuously without any end (default: false)
    --immediate, -i               immediately output without the typewriter animation (default: false)
+   --hide-descriptions, -d       hide descriptions between the steps (default: false)
    --skip-steps value, -s value  skip the amount of initial steps within the demo (default: 0)
    --help, -h                    show help (default: false)
    --version, -v                 print the version (default: false)
