@@ -23,12 +23,13 @@ type runFlag struct {
 }
 
 const (
-	FlagAll          = "all"
-	FlagAuto         = "auto"
-	FlagAutoTimeout  = "auto-timeout"
-	FlagContinuously = "continuously"
-	FlagImmediate    = "immediate"
-	FlagSkipSteps    = "skip-steps"
+	FlagAll              = "all"
+	FlagAuto             = "auto"
+	FlagAutoTimeout      = "auto-timeout"
+	FlagContinuously     = "continuously"
+	FlagHideDescriptions = "hide-descriptions"
+	FlagImmediate        = "immediate"
+	FlagSkipSteps        = "skip-steps"
 )
 
 func New() *Demo {
@@ -57,6 +58,11 @@ func New() *Demo {
 			Name:    FlagContinuously,
 			Aliases: []string{"c"},
 			Usage:   "run the demos continuously without any end",
+		},
+		&cli.BoolFlag{
+			Name:    FlagHideDescriptions,
+			Aliases: []string{"d"},
+			Usage:   "hide descriptions between the steps",
 		},
 		&cli.BoolFlag{
 			Name:    FlagImmediate,
