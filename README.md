@@ -1,6 +1,6 @@
 # demo
 
-[![CircleCI](https://circleci.com/gh/saschagrunert/demo.svg?style=shield)](https://circleci.com/gh/saschagrunert/demo)
+[![ci](https://github.com/saschagrunert/demo/actions/workflows/test.yml/badge.svg)](https://github.com/saschagrunert/demo/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/saschagrunert/demo/branch/master/graph/badge.svg)](https://codecov.io/gh/saschagrunert/demo)
 [![docs](https://img.shields.io/badge/godoc-demo-blue)](https://godoc.org/github.com/saschagrunert/demo)
 

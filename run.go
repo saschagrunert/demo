@@ -16,7 +16,7 @@ import (
 )
 
 // Every command will be executed in a new bash subshell. This is the only
-// external dependency we need
+// external dependency we need.
 const bash = "bash"
 
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
@@ -37,7 +37,7 @@ type step struct {
 	canFail       bool
 }
 
-// Options specify the run options
+// Options specify the run options.
 type Options struct {
 	AutoTimeout      time.Duration
 	Auto             bool
@@ -48,7 +48,7 @@ type Options struct {
 
 func emptyFn() error { return nil }
 
-// NewRun creates a new run for the provided description string
+// NewRun creates a new run for the provided description string.
 func NewRun(title string, description ...string) *Run {
 	return &Run{
 		title:       title,
@@ -61,7 +61,7 @@ func NewRun(title string, description ...string) *Run {
 	}
 }
 
-// optionsFrom creates a new set of options from the provided context
+// optionsFrom creates a new set of options from the provided context.
 func optionsFrom(ctx *cli.Context) Options {
 	return Options{
 		AutoTimeout:      ctx.Duration(FlagAutoTimeout),
@@ -72,46 +72,47 @@ func optionsFrom(ctx *cli.Context) Options {
 	}
 }
 
-// S is a short-hand for converting string slice syntaxes
+// S is a short-hand for converting string slice syntaxes.
 func S(s ...string) []string {
 	return s
 }
 
-// SetOutput can be used to replace the default output for the Run
+// SetOutput can be used to replace the default output for the Run.
 func (r *Run) SetOutput(output io.Writer) error {
 	if output == nil {
 		return errors.New("provided output is nil")
 	}
 	r.out = output
+
 	return nil
 }
 
-// Setup sets the cleanup function called before this run
+// Setup sets the cleanup function called before this run.
 func (r *Run) Setup(setupFn func() error) {
 	r.setup = setupFn
 }
 
-// Cleanup sets the cleanup function called after this run
+// Cleanup sets the cleanup function called after this run.
 func (r *Run) Cleanup(cleanupFn func() error) {
 	r.cleanup = cleanupFn
 }
 
-// Step creates a new step on the provided run
+// Step creates a new step on the provided run.
 func (r *Run) Step(text, command []string) {
 	r.steps = append(r.steps, step{r, text, command, false})
 }
 
-// StepCanFail creates a new step which can fail on execution
+// StepCanFail creates a new step which can fail on execution.
 func (r *Run) StepCanFail(text, command []string) {
 	r.steps = append(r.steps, step{r, text, command, true})
 }
 
-// Run executes the run in the provided CLI context
+// Run executes the run in the provided CLI context.
 func (r *Run) Run(ctx *cli.Context) error {
 	return r.RunWithOptions(optionsFrom(ctx))
 }
 
-// RunWithOptions executes the run with the provided Options
+// RunWithOptions executes the run with the provided Options.
 func (r *Run) RunWithOptions(opts Options) error {
 	if err := r.setup(); err != nil {
 		return err
@@ -130,6 +131,7 @@ func (r *Run) RunWithOptions(opts Options) error {
 			return err
 		}
 	}
+
 	return r.cleanup()
 }
 
@@ -157,11 +159,13 @@ func (r *Run) printTitleAndDescription() error {
 			return err
 		}
 	}
+
 	return nil
 }
 
 func write(w io.Writer, str string) error {
 	_, err := w.Write([]byte(str))
+
 	return err
 }
 
@@ -175,6 +179,7 @@ func (s *step) run(current, max int) error {
 	if len(s.command) > 0 {
 		return s.execute()
 	}
+
 	return nil
 }
 
@@ -214,6 +219,7 @@ func (s *step) execute() error {
 		return nil
 	}
 	s.print("")
+
 	return errors.Wrap(err, "step command failed")
 }
 
@@ -221,7 +227,7 @@ func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		for _, c := range m {
 			if !s.r.options.Immediate {
-				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond)
+				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond) // nolint: gosec
 			}
 			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {
 				return err
@@ -231,6 +237,7 @@ func (s *step) print(msg ...string) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -250,5 +257,6 @@ func (s *step) waitOrSleep() error {
 			return err
 		}
 	}
+
 	return nil
 }

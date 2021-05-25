@@ -8,8 +8,9 @@ import (
 	. "github.com/saschagrunert/demo/test/framework"
 )
 
-// TestDemo runs the created specs
+// TestDemo runs the created specs.
 func TestDemo(t *testing.T) {
+	t.Parallel()
 	RegisterFailHandler(Fail)
 	RunFrameworkSpecs(t, "demo")
 }

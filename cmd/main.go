@@ -27,7 +27,7 @@ func main() {
 	demo.Run()
 }
 
-// setup will run before every demo
+// setup will run before every demo.
 func setup(ctx *cli.Context) error {
 	// Ensure can be used for easy sequential command execution
 	return Ensure(
@@ -37,12 +37,12 @@ func setup(ctx *cli.Context) error {
 	)
 }
 
-// setup will run after every demo
+// setup will run after every demo.
 func cleanup(ctx *cli.Context) error {
 	return Ensure("echo 'Doing cleanup…'")
 }
 
-// example is the single demo run for this application
+// example is the single demo run for this application.
 func example() *Run {
 	// A new run contains a title and an optional description
 	r := NewRun(

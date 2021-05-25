@@ -11,7 +11,6 @@ import (
 )
 
 var _ = t.Describe("Demo", func() {
-
 	It("should succeed to run", func() {
 		// Given
 		os.Args = []string{"demo"}
@@ -41,6 +40,7 @@ var _ = t.Describe("Demo", func() {
 
 			r.Step(nil, demo.S("echo without description"))
 			r.Step(demo.S("Just a description without a command"), nil)
+
 			return r
 		}
 		sut := demo.New()
@@ -51,10 +51,12 @@ var _ = t.Describe("Demo", func() {
 
 		sut.Setup(func(*cli.Context) error {
 			succeed.setup = true
+
 			return nil
 		})
 		sut.Cleanup(func(*cli.Context) error {
 			succeed.cleanup = true
+
 			return nil
 		})
 
