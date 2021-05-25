@@ -4,8 +4,8 @@ import (
 	"os/exec"
 )
 
-// Ensure executes the provided commands in order
-// This utility function can be used during setup or cleanup
+// Ensure executes the provided commands in order.
+// This utility function can be used during setup or cleanup.
 func Ensure(commands ...string) error {
 	for _, c := range commands {
 		cmd := exec.Command(bash, "-c", c)
@@ -15,10 +15,11 @@ func Ensure(commands ...string) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
-// MustEnsure executes the provided commands in order and panics on failure
+// MustEnsure executes the provided commands in order and panics on failure.
 func MustEnsure(commands ...string) {
 	if err := Ensure(commands...); err != nil {
 		panic(err)

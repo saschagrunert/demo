@@ -23,15 +23,31 @@ type runFlag struct {
 }
 
 const (
-	FlagAll              = "all"
-	FlagAuto             = "auto"
-	FlagAutoTimeout      = "auto-timeout"
-	FlagContinuously     = "continuously"
+	// FlagAll is the flag for running all demos.
+	FlagAll = "all"
+
+	// FlagAuto is the flag for running in automatic mode.
+	FlagAuto = "auto"
+
+	// FlagAutoTimeout is the flag for the timeout to be waited when `auto` is
+	// enabled.
+	FlagAutoTimeout = "auto-timeout"
+
+	// FlagContinuously is the flag for running the demos continuously without
+	// any end.
+	FlagContinuously = "continuously"
+
+	// FlagHideDescriptions is the flag for hiding the descriptions.
 	FlagHideDescriptions = "hide-descriptions"
-	FlagImmediate        = "immediate"
-	FlagSkipSteps        = "skip-steps"
+
+	// FlagImmediate is the flag for disabling the text animations.
+	FlagImmediate = "immediate"
+
+	// FlagSkipSteps is the flag for skipping n amount of steps.
+	FlagSkipSteps = "skip-steps"
 )
 
+// New creates a new Demo instance.
 func New() *Demo {
 	app := cli.NewApp()
 	app.UseShortOptionHandling = true
@@ -111,6 +127,7 @@ func New() *Demo {
 					return err
 				}
 			}
+
 			return nil
 		}
 		if ctx.Bool(FlagContinuously) {
@@ -120,18 +137,19 @@ func New() *Demo {
 				}
 			}
 		}
+
 		return runSelected()
 	}
 
 	return demo
 }
 
-// Setup sets the cleanup function called before each run
+// Setup sets the cleanup function called before each run.
 func (d *Demo) Setup(setupFn func(*cli.Context) error) {
 	d.setup = setupFn
 }
 
-// Cleanup sets the cleanup function called after each run
+// Cleanup sets the cleanup function called after each run.
 func (d *Demo) Cleanup(cleanupFn func(*cli.Context) error) {
 	d.cleanup = cleanupFn
 }
@@ -146,6 +164,7 @@ func (d *Demo) Add(run *Run, name, description string) {
 	d.runs = append(d.runs, &runFlag{run, flag})
 }
 
+// Run starts the demo.
 func (d *Demo) Run() {
 	// Catch interrupts and cleanup
 	c := make(chan os.Signal, 1)

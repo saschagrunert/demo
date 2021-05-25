@@ -8,7 +8,7 @@ COVERAGE_PATH := $(BUILD_PATH)/coverage
 JUNIT_PATH := $(BUILD_PATH)/junit
 
 define go-build
-	cd `pwd` && $(GO) build -ldflags '-s -w $(2)' \
+	cd `pwd` && $(GO) build -mod=vendor -ldflags '-s -w $(2)' \
 		-o $(BUILD_PATH)/$(shell basename $(1)) $(1)
 	@echo > /dev/null
 endef
@@ -49,7 +49,7 @@ test: $(GINKGO)
 
 ${GOLANGCI_LINT}:
 	export \
-		VERSION=v1.22.1 \
+		VERSION=v1.40.1 \
 		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
 		BINDIR=${BUILD_PATH} && \
 	curl -sfL $$URL/$$VERSION/install.sh | sh -s $$VERSION
