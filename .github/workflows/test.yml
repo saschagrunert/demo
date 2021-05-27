@@ -14,8 +14,8 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
+            ~/go/pkg
+            ~/.cache
           key: go-build-${{ hashFiles('**/go.sum') }}
           restore-keys: go-build-
       - run: make
@@ -27,8 +27,8 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: |
-            ~/go/pkg/mod
-            ~/.cache/go-lint
+            ~/go/pkg
+            ~/.cache
           key: go-lint-${{ hashFiles('**/go.sum') }}
           restore-keys: go-lint-
       - run: make lint
@@ -40,23 +40,9 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: |
-            ~/go/pkg/mod
-            ~/.cache/go-lint
+            ~/go/pkg
+            ~/.cache
           key: go-lint-${{ hashFiles('**/go.sum') }}
           restore-keys: go-lint-
       - run: make test
       - run: make codecov
-
-  vendor:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-lint
-          key: go-lint-${{ hashFiles('**/go.sum') }}
-          restore-keys: go-lint-
-      - run: make vendor
-      - run: .github/git-status

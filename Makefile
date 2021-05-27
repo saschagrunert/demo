@@ -8,7 +8,7 @@ COVERAGE_PATH := $(BUILD_PATH)/coverage
 JUNIT_PATH := $(BUILD_PATH)/junit
 
 define go-build
-	cd `pwd` && $(GO) build -mod=vendor -ldflags '-s -w $(2)' \
+	cd `pwd` && $(GO) build -ldflags '-s -w $(2)' \
 		-o $(BUILD_PATH)/$(shell basename $(1)) $(1)
 	@echo > /dev/null
 endef
@@ -25,17 +25,13 @@ codecov: SHELL := $(shell which bash)
 codecov:
 	bash <(curl -s https://codecov.io/bash) -f $(COVERAGE_PATH)/coverprofile
 
-$(GINKGO):
-	$(call go-build,./vendor/github.com/onsi/ginkgo/ginkgo)
-
 .PHONY: test
-test: $(GINKGO)
+test:
 	rm -rf $(COVERAGE_PATH) && mkdir -p $(COVERAGE_PATH)
 	rm -rf $(JUNIT_PATH) && mkdir -p $(JUNIT_PATH)
-	$(BUILD_PATH)/ginkgo $(TESTFLAGS) \
+	$(GO) run github.com/onsi/ginkgo/ginkgo $(TESTFLAGS) \
 		-r -p \
 		--cover \
-		--mod vendor \
 		--randomizeAllSpecs \
 		--randomizeSuites \
 		--covermode atomic \
@@ -57,10 +53,3 @@ ${GOLANGCI_LINT}:
 .PHONY: lint
 lint: ${GOLANGCI_LINT}
 	${GOLANGCI_LINT} run
-
-.PHONY: vendor
-vendor:
-	export GO111MODULE=on \
-		$(GO) mod tidy && \
-		$(GO) mod vendor && \
-		$(GO) mod verify
