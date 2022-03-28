@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/gookit/color v1.5.0
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.18.1
+	github.com/onsi/gomega v1.19.0
 	github.com/pkg/errors v0.9.1
 	github.com/urfave/cli/v2 v2.4.0
 )
