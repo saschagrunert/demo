@@ -223,7 +223,11 @@ func (s *step) execute() error {
 	}
 	s.print("")
 
-	return fmt.Errorf("step command failed: %w", err)
+	if err != nil {
+		return fmt.Errorf("step command failed: %w", err)
+	}
+
+	return nil
 }
 
 //nolint:forbidigo // print is intended here
