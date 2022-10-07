@@ -1,7 +1,7 @@
 package main
 
 import (
-	. "github.com/saschagrunert/demo" // nolint
+	. "github.com/saschagrunert/demo" //nolint:revive,stylecheck // dot imports are intended here
 	"github.com/urfave/cli/v2"
 )
 

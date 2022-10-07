@@ -1,12 +1,9 @@
 package framework
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/reporters"
+	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
 
@@ -55,7 +52,5 @@ func (t *TestFramework) Describe(text string, body func()) bool {
 
 // RunFrameworkSpecs is a convenience wrapper for running tests.
 func RunFrameworkSpecs(t *testing.T, suiteName string) {
-	ginkgo.RunSpecsWithDefaultAndCustomReporters(t, suiteName,
-		[]ginkgo.Reporter{reporters.NewJUnitReporter(
-			fmt.Sprintf("%v_junit.xml", strings.ToLower(suiteName)))})
+	ginkgo.RunSpecs(t, suiteName)
 }
