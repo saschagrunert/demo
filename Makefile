@@ -1,11 +1,9 @@
 GO := go
 
 BUILD_PATH := $(shell pwd)/build
-GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
-GINKGO := $(BUILD_PATH)/ginkgo
-
 COVERAGE_PATH := $(BUILD_PATH)/coverage
-JUNIT_PATH := $(BUILD_PATH)/junit
+
+GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
 
 define go-build
 	cd `pwd` && $(GO) build -ldflags '-s -w $(2)' \
@@ -28,28 +26,27 @@ codecov:
 .PHONY: test
 test:
 	rm -rf $(COVERAGE_PATH) && mkdir -p $(COVERAGE_PATH)
-	rm -rf $(JUNIT_PATH) && mkdir -p $(JUNIT_PATH)
-	$(GO) run github.com/onsi/ginkgo/ginkgo $(TESTFLAGS) \
+	$(GO) run github.com/onsi/ginkgo/v2/ginkgo run $(TESTFLAGS) \
 		-r -p \
 		--cover \
-		--randomizeAllSpecs \
-		--randomizeSuites \
+		--randomize-all \
+		--randomize-suites \
 		--covermode atomic \
-		--outputdir $(COVERAGE_PATH) \
+		--output-dir $(COVERAGE_PATH) \
 		--coverprofile coverprofile \
-		--slowSpecThreshold 60 \
+		--junit-report coverage.junit \
+		--slow-spec-threshold 60s \
 		--succinct
 	$(GO) tool cover -html=$(COVERAGE_PATH)/coverprofile -o $(COVERAGE_PATH)/coverage.html
-	find . -name '*_junit.xml' -exec mv -t $(JUNIT_PATH) {} +
-	rm coverprofile
 
 ${GOLANGCI_LINT}:
 	export \
-		VERSION=v1.40.1 \
+		VERSION=v1.50.0 \
 		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
 		BINDIR=${BUILD_PATH} && \
 	curl -sfL $$URL/$$VERSION/install.sh | sh -s $$VERSION
 
 .PHONY: lint
 lint: ${GOLANGCI_LINT}
+	GL_DEBUG=gocritic ${GOLANGCI_LINT} linters
 	${GOLANGCI_LINT} run

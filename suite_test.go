@@ -3,7 +3,7 @@ package demo_test
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/saschagrunert/demo/test/framework"
 )
@@ -15,7 +15,7 @@ func TestDemo(t *testing.T) {
 	RunFrameworkSpecs(t, "demo")
 }
 
-// nolint: gochecknoglobals
+//nolint:gochecknoglobals // the framework has to be global
 var t *TestFramework
 
 var _ = BeforeSuite(func() {

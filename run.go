@@ -223,11 +223,13 @@ func (s *step) execute() error {
 	return errors.Wrap(err, "step command failed")
 }
 
+//nolint:forbidigo // print is intended here
 func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		for _, c := range m {
 			if !s.r.options.Immediate {
-				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond) // nolint: gosec
+				//nolint:gosec // the sleep has no security implications
+				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond)
 			}
 			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {
 				return err
