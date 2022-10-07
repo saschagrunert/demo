@@ -1,7 +1,7 @@
 # demo
 
 [![ci](https://github.com/saschagrunert/demo/actions/workflows/test.yml/badge.svg)](https://github.com/saschagrunert/demo/actions/workflows/test.yml)
-[![codecov](https://codecov.io/gh/saschagrunert/demo/branch/master/graph/badge.svg)](https://codecov.io/gh/saschagrunert/demo)
+[![codecov](https://codecov.io/gh/saschagrunert/demo/branch/main/graph/badge.svg)](https://codecov.io/gh/saschagrunert/demo)
 [![docs](https://img.shields.io/badge/godoc-demo-blue)](https://godoc.org/github.com/saschagrunert/demo)
 
 ![demo](.github/demo.svg)
