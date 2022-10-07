@@ -2,6 +2,7 @@ package demo
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -11,13 +12,15 @@ import (
 	"time"
 
 	"github.com/gookit/color"
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
 
 // Every command will be executed in a new bash subshell. This is the only
 // external dependency we need.
 const bash = "bash"
+
+// errOutputNil is the error returned if no output has been set.
+var errOutputNil = errors.New("provided output is nil")
 
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
@@ -80,7 +83,7 @@ func S(s ...string) []string {
 // SetOutput can be used to replace the default output for the Run.
 func (r *Run) SetOutput(output io.Writer) error {
 	if output == nil {
-		return errors.New("provided output is nil")
+		return errOutputNil
 	}
 	r.out = output
 
@@ -171,7 +174,7 @@ func write(w io.Writer, str string) error {
 
 func (s *step) run(current, max int) error {
 	if err := s.waitOrSleep(); err != nil {
-		return errors.Wrapf(err, "unable to run step: %v", s)
+		return fmt.Errorf("unable to run step: %v: %w", s, err)
 	}
 	if len(s.text) > 0 && !s.r.options.HideDescriptions {
 		s.echo(current, max)
@@ -212,7 +215,7 @@ func (s *step) execute() error {
 	cmdString := color.Green.Sprintf("> %s", strings.Join(s.command, " \\\n    "))
 	s.print(cmdString)
 	if err := s.waitOrSleep(); err != nil {
-		return errors.Wrapf(err, "unable to execute step: %v", s)
+		return fmt.Errorf("unable to execute step: %v: %w", s, err)
 	}
 	err := cmd.Run()
 	if s.canFail {
@@ -220,7 +223,7 @@ func (s *step) execute() error {
 	}
 	s.print("")
 
-	return errors.Wrap(err, "step command failed")
+	return fmt.Errorf("step command failed: %w", err)
 }
 
 //nolint:forbidigo // print is intended here
@@ -252,7 +255,7 @@ func (s *step) waitOrSleep() error {
 		}
 		_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
 		if err != nil {
-			return errors.Wrap(err, "unable to read newline")
+			return fmt.Errorf("unable to read newline: %w", err)
 		}
 		// Move cursor up again
 		if err := write(s.r.out, "\x1b[1A"); err != nil {
