@@ -6,7 +6,7 @@ require (
 	github.com/gookit/color v1.5.2
 	github.com/onsi/ginkgo/v2 v2.4.0
 	github.com/onsi/gomega v1.22.1
-	github.com/urfave/cli/v2 v2.20.2
+	github.com/urfave/cli/v2 v2.20.3
 )
 
 require (
