@@ -35,13 +35,12 @@ test:
 		--output-dir $(COVERAGE_PATH) \
 		--coverprofile coverprofile \
 		--junit-report coverage.junit \
-		--slow-spec-threshold 60s \
 		--succinct
 	$(GO) tool cover -html=$(COVERAGE_PATH)/coverprofile -o $(COVERAGE_PATH)/coverage.html
 
 ${GOLANGCI_LINT}:
 	export \
-		VERSION=v1.50.0 \
+		VERSION=v1.50.1 \
 		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
 		BINDIR=${BUILD_PATH} && \
 	curl -sfL $$URL/$$VERSION/install.sh | sh -s $$VERSION
