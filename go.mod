@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/gookit/color v1.5.2
-	github.com/onsi/ginkgo/v2 v2.7.0
+	github.com/onsi/ginkgo/v2 v2.7.1
 	github.com/onsi/gomega v1.26.0
 	github.com/urfave/cli/v2 v2.24.2
 )
@@ -21,6 +21,6 @@ require (
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sys v0.4.0 // indirect
 	golang.org/x/text v0.6.0 // indirect
-	golang.org/x/tools v0.4.0 // indirect
+	golang.org/x/tools v0.5.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
