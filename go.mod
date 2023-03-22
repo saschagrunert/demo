@@ -3,7 +3,7 @@ module github.com/saschagrunert/demo
 go 1.19
 
 require (
-	github.com/gookit/color v1.5.2
+	github.com/gookit/color v1.5.3
 	github.com/onsi/ginkgo/v2 v2.9.1
 	github.com/onsi/gomega v1.27.4
 	github.com/urfave/cli/v2 v2.25.0
