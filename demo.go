@@ -33,6 +33,13 @@ const (
 	// enabled.
 	FlagAutoTimeout = "auto-timeout"
 
+	// FlagBreakPoint is the flag for doing`auto` but with breakpoint
+	FlagBreakPoint = "with-breakpoints"
+
+	// FlagContinueOnError is the flag for steps continue running if
+	// there is an error
+	FlagContinueOnError = "continue-on-error"
+
 	// FlagContinuously is the flag for running the demos continuously without
 	// any end.
 	FlagContinuously = "continuously"
@@ -64,6 +71,7 @@ func New() *Demo {
 		&cli.BoolFlag{
 			Name:    FlagAuto,
 			Aliases: []string{"a"},
+			Value:   true,
 			Usage: "run the demo in automatic mode, " +
 				"where every step gets executed automatically",
 		},
@@ -71,7 +79,15 @@ func New() *Demo {
 			Name:    FlagAutoTimeout,
 			Aliases: []string{"t"},
 			Usage:   "the timeout to be waited when `auto` is enabled",
-			Value:   3 * time.Second,
+			Value:   1 * time.Second,
+		},
+		&cli.BoolFlag{
+			Name:  FlagBreakPoint,
+			Usage: "breakpoint",
+		},
+		&cli.BoolFlag{
+			Name:  FlagContinueOnError,
+			Usage: "continue if there a step fails",
 		},
 		&cli.BoolFlag{
 			Name:    FlagContinuously,
