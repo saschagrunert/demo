@@ -31,15 +31,17 @@ type Run struct {
 }
 
 type step struct {
-	r             *Run
-	text, command []string
-	canFail       bool
+	r                     *Run
+	text, command         []string
+	canFail, isBreakPoint bool
 }
 
 // Options specify the run options.
 type Options struct {
 	AutoTimeout      time.Duration
 	Auto             bool
+	BreakPoint       bool
+	ContinueOnError  bool
 	HideDescriptions bool
 	Immediate        bool
 	SkipSteps        int
@@ -66,6 +68,8 @@ func optionsFrom(ctx *cli.Context) Options {
 	return Options{
 		AutoTimeout:      ctx.Duration(FlagAutoTimeout),
 		Auto:             ctx.Bool(FlagAuto),
+		BreakPoint:       ctx.Bool(FlagBreakPoint),
+		ContinueOnError:  ctx.Bool(FlagContinueOnError),
 		HideDescriptions: ctx.Bool(FlagHideDescriptions),
 		Immediate:        ctx.Bool(FlagImmediate),
 		SkipSteps:        ctx.Int(FlagSkipSteps),
@@ -100,12 +104,17 @@ func (r *Run) Cleanup(cleanupFn func() error) {
 
 // Step creates a new step on the provided run.
 func (r *Run) Step(text, command []string) {
-	r.steps = append(r.steps, step{r, text, command, false})
+	r.steps = append(r.steps, step{r, text, command, false, false})
 }
 
 // StepCanFail creates a new step which can fail on execution.
 func (r *Run) StepCanFail(text, command []string) {
-	r.steps = append(r.steps, step{r, text, command, true})
+	r.steps = append(r.steps, step{r, text, command, true, false})
+}
+
+// BreakPoint creates a new step which can fail on execution.
+func (r *Run) BreakPoint() {
+	r.steps = append(r.steps, step{r, []string{"break"}, nil, true, true})
 }
 
 // Run executes the run in the provided CLI context.
@@ -131,6 +140,10 @@ func (r *Run) RunWithOptions(opts Options) error {
 	for i, step := range r.steps {
 		if r.options.SkipSteps > i {
 			continue
+		}
+
+		if r.options.ContinueOnError {
+			step.canFail = true
 		}
 		if err := step.run(i+1, len(r.steps)); err != nil {
 			return err
@@ -180,6 +193,9 @@ func (s *step) run(current, max int) error {
 	}
 	if len(s.text) > 0 && !s.r.options.HideDescriptions {
 		s.echo(current, max)
+	}
+	if s.isBreakPoint {
+		return s.wait()
 	}
 	if len(s.command) > 0 {
 		return s.execute()
@@ -272,6 +288,26 @@ func (s *step) waitOrSleep() error {
 		if err := write(s.r.out, "\x1b[1A"); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (s *step) wait() error {
+	if s.r.options.BreakPoint {
+		return nil
+	}
+
+	if err := write(s.r.out, "bp"); err != nil {
+		return err
+	}
+	_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
+	if err != nil {
+		return fmt.Errorf("unable to read newline: %w", err)
+	}
+	// Move cursor up again
+	if err := write(s.r.out, "\x1b[1A"); err != nil {
+		return err
 	}
 
 	return nil
