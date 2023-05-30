@@ -50,6 +50,9 @@ const (
 	// FlagImmediate is the flag for disabling the text animations.
 	FlagImmediate = "immediate"
 
+	// DryRun
+	FlagDryRun = "dry-run"
+
 	// FlagSkipSteps is the flag for skipping n amount of steps.
 	FlagSkipSteps = "skip-steps"
 
@@ -74,6 +77,11 @@ func New() *Demo {
 			Value:   true,
 			Usage: "run the demo in automatic mode, " +
 				"where every step gets executed automatically",
+		},
+		&cli.BoolFlag{
+			Name:  FlagDryRun,
+			Value: true,
+			Usage: "run the demo in prints only commands",
 		},
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,

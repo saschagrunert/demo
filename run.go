@@ -43,6 +43,7 @@ type Options struct {
 	BreakPoint       bool
 	ContinueOnError  bool
 	HideDescriptions bool
+	DryRun           bool
 	Immediate        bool
 	SkipSteps        int
 	Shell            string
@@ -71,6 +72,7 @@ func optionsFrom(ctx *cli.Context) Options {
 		BreakPoint:       ctx.Bool(FlagBreakPoint),
 		ContinueOnError:  ctx.Bool(FlagContinueOnError),
 		HideDescriptions: ctx.Bool(FlagHideDescriptions),
+		DryRun:           ctx.Bool(FlagDryRun),
 		Immediate:        ctx.Bool(FlagImmediate),
 		SkipSteps:        ctx.Int(FlagSkipSteps),
 		Shell:            ctx.String(FlagShell),
@@ -114,7 +116,7 @@ func (r *Run) StepCanFail(text, command []string) {
 
 // BreakPoint creates a new step which can fail on execution.
 func (r *Run) BreakPoint() {
-	r.steps = append(r.steps, step{r, []string{"break"}, nil, true, true})
+	r.steps = append(r.steps, step{r, nil, nil, true, true})
 }
 
 // Run executes the run in the provided CLI context.
@@ -236,10 +238,13 @@ func (s *step) execute() error {
 	cmd.Stderr = s.r.out
 	cmd.Stdout = s.r.out
 
-	cmdString := color.Green.Sprintf("> %s", strings.Join(s.command, " \\\n    "))
-	s.print(cmdString)
+	cmdString := color.Green.Sprintf("%s", strings.Join(s.command, " \\\n    "))
+	s.print("```\n" + cmdString + "\n```\n")
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to execute step: %v: %w", s, err)
+	}
+	if s.r.options.DryRun {
+		return nil
 	}
 	err := cmd.Run()
 	if s.canFail {
@@ -294,7 +299,7 @@ func (s *step) waitOrSleep() error {
 }
 
 func (s *step) wait() error {
-	if s.r.options.BreakPoint {
+	if !s.r.options.BreakPoint {
 		return nil
 	}
 
