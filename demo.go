@@ -44,14 +44,17 @@ const (
 	// any end.
 	FlagContinuously = "continuously"
 
+	// DryRun
+	FlagDryRun = "dry-run"
+
 	// FlagHideDescriptions is the flag for hiding the descriptions.
 	FlagHideDescriptions = "hide-descriptions"
 
 	// FlagImmediate is the flag for disabling the text animations.
 	FlagImmediate = "immediate"
 
-	// DryRun
-	FlagDryRun = "dry-run"
+	// NoColor true to print without colors, special characters
+	FlagNoColor = "no-color"
 
 	// FlagSkipSteps is the flag for skipping n amount of steps.
 	FlagSkipSteps = "skip-steps"
@@ -81,7 +84,11 @@ func New() *Demo {
 		&cli.BoolFlag{
 			Name:  FlagDryRun,
 			Value: true,
-			Usage: "run the demo in prints only commands",
+			Usage: "run the demo and only prints the commands",
+		},
+		&cli.BoolFlag{
+			Name:  FlagNoColor,
+			Usage: "run the demo and output to be without colors",
 		},
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,

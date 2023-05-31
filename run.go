@@ -44,6 +44,7 @@ type Options struct {
 	ContinueOnError  bool
 	HideDescriptions bool
 	DryRun           bool
+	NoColor          bool
 	Immediate        bool
 	SkipSteps        int
 	Shell            string
@@ -73,6 +74,7 @@ func optionsFrom(ctx *cli.Context) Options {
 		ContinueOnError:  ctx.Bool(FlagContinueOnError),
 		HideDescriptions: ctx.Bool(FlagHideDescriptions),
 		DryRun:           ctx.Bool(FlagDryRun),
+		NoColor:          ctx.Bool(FlagNoColor),
 		Immediate:        ctx.Bool(FlagImmediate),
 		SkipSteps:        ctx.Int(FlagSkipSteps),
 		Shell:            ctx.String(FlagShell),
@@ -156,11 +158,15 @@ func (r *Run) RunWithOptions(opts Options) error {
 }
 
 func (r *Run) printTitleAndDescription() error {
-	if err := write(r.out, color.Cyan.Sprintf("%s\n", r.title)); err != nil {
+	p := color.Cyan.Sprintf
+	if r.options.NoColor {
+		p = fmt.Sprintf
+	}
+	if err := write(r.out, p("%s\n", r.title)); err != nil {
 		return err
 	}
 	for range r.title {
-		if err := write(r.out, color.Cyan.Sprint("=")); err != nil {
+		if err := write(r.out, p("=")); err != nil {
 			return err
 		}
 	}
@@ -168,9 +174,14 @@ func (r *Run) printTitleAndDescription() error {
 		return err
 	}
 	if !r.options.HideDescriptions {
+		p = color.White.Darken().Sprintf
+		if r.options.NoColor {
+			p = fmt.Sprintf
+		}
+
 		for _, d := range r.description {
 			if err := write(
-				r.out, color.White.Darken().Sprintf("%s\n", d),
+				r.out, p("%s\n", d),
 			); err != nil {
 				return err
 			}
@@ -207,6 +218,11 @@ func (s *step) run(current, max int) error {
 }
 
 func (s *step) echo(current, max int) {
+	p := color.White.Darken().Sprintf
+	if s.r.options.NoColor {
+		p = fmt.Sprintf
+	}
+
 	prepared := []string{}
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
@@ -218,13 +234,13 @@ func (s *step) echo(current, max int) {
 			}
 			prepared = append(
 				prepared,
-				color.White.Darken().Sprintf(
-					"# %s [%d/%d]%s\n",
-					x, current, max, colon,
+				p(
+					"# %s [%d/%d]:\n",
+					x, current, max,
 				),
 			)
 		} else {
-			m := color.White.Darken().Sprintf("# %s", x)
+			m := p("# %s", x)
 			prepared = append(prepared, m)
 		}
 	}
@@ -238,7 +254,12 @@ func (s *step) execute() error {
 	cmd.Stderr = s.r.out
 	cmd.Stdout = s.r.out
 
-	cmdString := color.Green.Sprintf("%s", strings.Join(s.command, " \\\n    "))
+	p := color.Green.Sprintf
+	if s.r.options.NoColor {
+		p = fmt.Sprintf
+	}
+
+	cmdString := p("%s", strings.Join(s.command, " \\\n    "))
 	s.print("```\n" + cmdString + "\n```\n")
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to execute step: %v: %w", s, err)
