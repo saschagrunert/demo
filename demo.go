@@ -45,6 +45,9 @@ const (
 
 	// FlagSkipSteps is the flag for skipping n amount of steps.
 	FlagSkipSteps = "skip-steps"
+
+	// FlagShell is the flag for defining the shell that is used to execute the command(s).
+	FlagShell = "shell"
 )
 
 // New creates a new Demo instance.
@@ -89,6 +92,11 @@ func New() *Demo {
 			Name:    FlagSkipSteps,
 			Aliases: []string{"s"},
 			Usage:   "skip the amount of initial steps within the demo",
+		},
+		&cli.StringFlag{
+			Name:        FlagShell,
+			Usage:       "define the shell that is used to execute the command(s)",
+			DefaultText: "bash",
 		},
 	}
 

@@ -15,10 +15,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// Every command will be executed in a new bash subshell. This is the only
-// external dependency we need.
-const bash = "bash"
-
 // errOutputNil is the error returned if no output has been set.
 var errOutputNil = errors.New("provided output is nil")
 
@@ -47,6 +43,7 @@ type Options struct {
 	HideDescriptions bool
 	Immediate        bool
 	SkipSteps        int
+	Shell            string
 }
 
 func emptyFn() error { return nil }
@@ -72,6 +69,7 @@ func optionsFrom(ctx *cli.Context) Options {
 		HideDescriptions: ctx.Bool(FlagHideDescriptions),
 		Immediate:        ctx.Bool(FlagImmediate),
 		SkipSteps:        ctx.Int(FlagSkipSteps),
+		Shell:            ctx.String(FlagShell),
 	}
 }
 
@@ -117,6 +115,10 @@ func (r *Run) Run(ctx *cli.Context) error {
 
 // RunWithOptions executes the run with the provided Options.
 func (r *Run) RunWithOptions(opts Options) error {
+	if opts.Shell == "" {
+		opts.Shell = "bash"
+	}
+
 	if err := r.setup(); err != nil {
 		return err
 	}
@@ -207,7 +209,7 @@ func (s *step) echo(current, max int) {
 
 func (s *step) execute() error {
 	joinedCommand := strings.Join(s.command, " ")
-	cmd := exec.Command(bash, "-c", joinedCommand)
+	cmd := exec.Command(s.r.options.Shell, "-c", joinedCommand) //nolint:gosec // we purposefully run user-provided code
 
 	cmd.Stderr = s.r.out
 	cmd.Stdout = s.r.out
