@@ -8,7 +8,7 @@ import (
 // This utility function can be used during setup or cleanup.
 func Ensure(commands ...string) error {
 	for _, c := range commands {
-		cmd := exec.Command(bash, "-c", c)
+		cmd := exec.Command("sh", "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
 		if err := cmd.Run(); err != nil {
