@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/gookit/color v1.5.4
 	github.com/onsi/ginkgo/v2 v2.13.0
-	github.com/onsi/gomega v1.28.1
+	github.com/onsi/gomega v1.29.0
 	github.com/urfave/cli/v2 v2.25.7
 )
 
