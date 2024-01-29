@@ -12,7 +12,6 @@ linters:
     - containedctx
     - contextcheck
     - decorder
-    - depguard
     - dogsled
     - dupl
     - dupword
@@ -68,7 +67,6 @@ linters:
     - predeclared
     - promlinter
     - reassign
-    - revive
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
@@ -86,11 +84,13 @@ linters:
     - wastedassign
     - whitespace
     # - cyclop
+    # - depguard
     # - exhaustruct
     # - funlen
     # - gci
     # - gocognit
     # - gomnd
+    # - revive
     # - thelper
     # - varnamelen
     # - wrapcheck
@@ -149,7 +149,6 @@ linters-settings:
       - importShadow
       - indexAlloc
       - initClause
-      - ioutilDeprecated
       - mapKey
       - methodExprCall
       - nestingReduce
@@ -176,6 +175,7 @@ linters-settings:
       - sliceClear
       - sloppyLen
       - sloppyReassign
+      - sloppyTestFuncName
       - sloppyTypeAssert
       - sortSlice
       - sprintfQuotedString
@@ -194,6 +194,7 @@ linters-settings:
       - typeDefFirst
       - typeSwitchVar
       - typeUnparen
+      - uncheckedInlineErr
       - underef
       - unlabelStmt
       - unlambda

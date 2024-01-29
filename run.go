@@ -232,7 +232,6 @@ func (s *step) execute() error {
 	return nil
 }
 
-//nolint:forbidigo // print is intended here
 func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		for _, c := range m {
