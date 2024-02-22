@@ -33,18 +33,18 @@ const (
 	// enabled.
 	FlagAutoTimeout = "auto-timeout"
 
-	// FlagBreakPoint is the flag for doing`auto` but with breakpoint
+	// FlagBreakPoint is the flag for doing`auto` but with breakpoint.
 	FlagBreakPoint = "with-breakpoints"
 
 	// FlagContinueOnError is the flag for steps continue running if
-	// there is an error
+	// there is an error.
 	FlagContinueOnError = "continue-on-error"
 
 	// FlagContinuously is the flag for running the demos continuously without
 	// any end.
 	FlagContinuously = "continuously"
 
-	// DryRun
+	// DryRun only prints the command in the stdout.
 	FlagDryRun = "dry-run"
 
 	// FlagHideDescriptions is the flag for hiding the descriptions.
@@ -53,7 +53,7 @@ const (
 	// FlagImmediate is the flag for disabling the text animations.
 	FlagImmediate = "immediate"
 
-	// NoColor true to print without colors, special characters
+	// NoColor true to print without colors, special characters for writing into file.
 	FlagNoColor = "no-color"
 
 	// FlagSkipSteps is the flag for skipping n amount of steps.
@@ -77,7 +77,6 @@ func New() *Demo {
 		&cli.BoolFlag{
 			Name:    FlagAuto,
 			Aliases: []string{"a"},
-			Value:   true,
 			Usage: "run the demo in automatic mode, " +
 				"where every step gets executed automatically",
 		},
