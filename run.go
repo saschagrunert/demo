@@ -192,11 +192,17 @@ func (s *step) echo(current, max int) {
 	prepared := []string{}
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
+			colon := ":"
+			if s.command == nil {
+				// Do not set the expectation that there is more if no command
+				// provided.
+				colon = ""
+			}
 			prepared = append(
 				prepared,
 				color.White.Darken().Sprintf(
-					"# %s [%d/%d]:\n",
-					x, current, max,
+					"# %s [%d/%d]%s\n",
+					x, current, max, colon,
 				),
 			)
 		} else {
