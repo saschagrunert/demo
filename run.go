@@ -235,8 +235,8 @@ func (s *step) echo(current, max int) {
 			prepared = append(
 				prepared,
 				p(
-					"# %s [%d/%d]:\n",
-					x, current, max,
+					"# %s [%d/%d]%s\n",
+					x, current, max, colon,
 				),
 			)
 		} else {
@@ -259,8 +259,8 @@ func (s *step) execute() error {
 		p = fmt.Sprintf
 	}
 
-	cmdString := p("%s", strings.Join(s.command, " \\\n    "))
-	s.print("```\n" + cmdString + "\n```\n")
+	cmdString := p("> %s", strings.Join(s.command, " \\\n    "))
+	s.print(cmdString)
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to execute step: %v: %w", s, err)
 	}
