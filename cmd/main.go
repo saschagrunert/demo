@@ -1,7 +1,7 @@
 package main
 
 import (
-	. "github.com/saschagrunert/demo" //nolint:revive,stylecheck // dot imports are intended here
+	. "github.com/saschagrunert/demo" //nolint:stylecheck // dot imports are intended here
 	"github.com/urfave/cli/v2"
 )
 
@@ -28,7 +28,7 @@ func main() {
 }
 
 // setup will run before every demo.
-func setup(ctx *cli.Context) error {
+func setup(*cli.Context) error {
 	// Ensure can be used for easy sequential command execution
 	return Ensure(
 		"echo 'Doing first setup…'",
@@ -38,7 +38,7 @@ func setup(ctx *cli.Context) error {
 }
 
 // setup will run after every demo.
-func cleanup(ctx *cli.Context) error {
+func cleanup(*cli.Context) error {
 	return Ensure("echo 'Doing cleanup…'")
 }
 

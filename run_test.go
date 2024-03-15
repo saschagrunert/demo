@@ -6,9 +6,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/urfave/cli/v2"
-
 	"github.com/saschagrunert/demo"
+	"github.com/urfave/cli/v2"
 )
 
 var _ = t.Describe("Run", func() {
@@ -26,7 +25,7 @@ var _ = t.Describe("Run", func() {
 
 		out = &strings.Builder{}
 		err := sut.SetOutput(out)
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 
 		opts = demo.Options{
 			AutoTimeout: 0,
@@ -42,7 +41,7 @@ var _ = t.Describe("Run", func() {
 		err := sut.RunWithOptions(opts)
 
 		// Then
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 		Expect(out).To(ContainSubstring(title))
 		Expect(out).To(ContainSubstring(description[0]))
 		Expect(out).To(ContainSubstring(description[1]))
@@ -60,7 +59,7 @@ var _ = t.Describe("Run", func() {
 		err := sut.RunWithOptions(opts)
 
 		// Then
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 		Expect(out).To(ContainSubstring(title))
 		Expect(out).To(ContainSubstring(description[0]))
 		Expect(out).To(ContainSubstring(description[1]))
@@ -80,7 +79,7 @@ var _ = t.Describe("Run", func() {
 		err := sut.RunWithOptions(opts)
 
 		// Then
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should fail to set nil output", func() {
@@ -89,7 +88,7 @@ var _ = t.Describe("Run", func() {
 		err := sut.SetOutput(nil)
 
 		// Then
-		Expect(err).NotTo(BeNil())
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("should succeed to run from a cli context", func() {
@@ -105,6 +104,6 @@ var _ = t.Describe("Run", func() {
 		err := sut.Run(ctx)
 
 		// Then
-		Expect(err).To(BeNil())
+		Expect(err).ToNot(HaveOccurred())
 	})
 })

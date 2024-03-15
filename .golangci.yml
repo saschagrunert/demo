@@ -11,6 +11,7 @@ linters:
     - bodyclose
     - containedctx
     - contextcheck
+    - cyclop
     - decorder
     - dogsled
     - dupl
@@ -25,8 +26,14 @@ linters:
     - exportloopref
     - forbidigo
     - forcetypeassert
+    - funlen
+    - gci
+    - ginkgolinter
+    - gocheckcompilerdirectives
     - gochecknoglobals
     - gochecknoinits
+    - gochecksumtype
+    - gocognit
     - goconst
     - gocritic
     - gocyclo
@@ -37,14 +44,17 @@ linters:
     - gofumpt
     - goheader
     - goimports
+    - gomnd
     - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
     - gosimple
+    - gosmopolitan
     - govet
     - grouper
     - importas
+    - inamedparam
     - ineffassign
     - interfacebloat
     - ireturn
@@ -52,7 +62,9 @@ linters:
     - loggercheck
     - maintidx
     - makezero
+    - mirror
     - misspell
+    - musttag
     - nakedret
     - nestif
     - nilerr
@@ -63,18 +75,26 @@ linters:
     - nonamedreturns
     - nosprintfhostport
     - paralleltest
+    - perfsprint
     - prealloc
     - predeclared
     - promlinter
+    - protogetter
     - reassign
+    - revive
     - rowserrcheck
+    - sloglint
+    - spancheck
     - sqlclosecheck
     - staticcheck
     - stylecheck
+    - tagalign
     - tagliatelle
     - tenv
     - testableexamples
+    - testifylint
     - testpackage
+    - thelper
     - tparallel
     - typecheck
     - unconvert
@@ -83,22 +103,23 @@ linters:
     - usestdlibvars
     - wastedassign
     - whitespace
-    # - cyclop
+    - wrapcheck
+    - zerologlint
     # - depguard
     # - exhaustruct
-    # - funlen
-    # - gci
-    # - gocognit
-    # - gomnd
-    # - revive
-    # - thelper
     # - varnamelen
-    # - wrapcheck
     # - wsl
 linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
+  funlen:
+    lines: 150
+  cyclop:
+    max-complexity: 15
+  gocognit:
+    min-complexity: 40
+  revive:
+    rules:
+      - name: dot-imports
+        disabled: true
   gocritic:
     enabled-checks:
       - appendAssign
@@ -110,6 +131,7 @@ linters-settings:
       - badLock
       - badRegexp
       - badSorting
+      - badSyncOnceFunc
       - boolExprSimplify
       - builtinShadow
       - builtinShadowDecl
@@ -175,7 +197,6 @@ linters-settings:
       - sliceClear
       - sloppyLen
       - sloppyReassign
-      - sloppyTestFuncName
       - sloppyTypeAssert
       - sortSlice
       - sprintfQuotedString
@@ -185,7 +206,6 @@ linters-settings:
       - stringsCompare
       - switchTrue
       - syncMapLoadAndDelete
-      - timeCmpSimplify
       - timeExprSimplify
       - todoCommentWithoutDetail
       - tooManyResultsChecker
