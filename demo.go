@@ -82,7 +82,7 @@ func New() *Demo {
 		},
 		&cli.BoolFlag{
 			Name:  FlagDryRun,
-			Value: true,
+			Value: false,
 			Usage: "run the demo and only prints the commands",
 		},
 		&cli.BoolFlag{
