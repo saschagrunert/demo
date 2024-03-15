@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"fmt"
 	"os/exec"
 )
 
@@ -12,7 +13,7 @@ func Ensure(commands ...string) error {
 		cmd.Stderr = nil
 		cmd.Stdout = nil
 		if err := cmd.Run(); err != nil {
-			return err
+			return fmt.Errorf("run command: %w", err)
 		}
 	}
 

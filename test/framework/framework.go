@@ -23,7 +23,7 @@ func NewTestFramework(setup, teardown func(*TestFramework) error) *TestFramework
 }
 
 // NilFunc is a convenience function which simply does nothing.
-func NilFunc(f *TestFramework) error {
+func NilFunc(*TestFramework) error {
 	return nil
 }
 
@@ -52,5 +52,6 @@ func (t *TestFramework) Describe(text string, body func()) bool {
 
 // RunFrameworkSpecs is a convenience wrapper for running tests.
 func RunFrameworkSpecs(t *testing.T, suiteName string) {
+	t.Helper()
 	ginkgo.RunSpecs(t, suiteName)
 }

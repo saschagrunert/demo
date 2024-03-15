@@ -196,8 +196,11 @@ func (r *Run) printTitleAndDescription() error {
 
 func write(w io.Writer, str string) error {
 	_, err := w.Write([]byte(str))
+	if err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
 
-	return err
+	return nil
 }
 
 func (s *step) run(current, max int) error {
@@ -284,7 +287,7 @@ func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		for _, c := range m {
 			if !s.r.options.Immediate {
-				//nolint:gosec // the sleep has no security implications
+				//nolint:gosec,gomnd // the sleep has no security implications and is randomly chosen
 				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond)
 			}
 			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {

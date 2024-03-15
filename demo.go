@@ -1,10 +1,10 @@
 package demo
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -194,7 +194,7 @@ func (d *Demo) Cleanup(cleanupFn func(*cli.Context) error) {
 
 func (d *Demo) Add(run *Run, name, description string) {
 	flag := &cli.BoolFlag{
-		Name:    fmt.Sprintf("%d", len(d.runs)),
+		Name:    strconv.Itoa(len(d.runs)),
 		Aliases: []string{name},
 		Usage:   description,
 	}
