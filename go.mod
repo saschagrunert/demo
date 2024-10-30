@@ -1,6 +1,6 @@
 module github.com/saschagrunert/demo
 
-go 1.22
+go 1.23
 
 require (
 	github.com/gookit/color v1.5.4
