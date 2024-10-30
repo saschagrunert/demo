@@ -203,12 +203,12 @@ func write(w io.Writer, str string) error {
 	return nil
 }
 
-func (s *step) run(current, max int) error {
+func (s *step) run(current, maximum int) error {
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to run step: %v: %w", s, err)
 	}
 	if len(s.text) > 0 && !s.r.options.HideDescriptions {
-		s.echo(current, max)
+		s.echo(current, maximum)
 	}
 	if s.isBreakPoint {
 		return s.wait()
@@ -220,7 +220,7 @@ func (s *step) run(current, max int) error {
 	return nil
 }
 
-func (s *step) echo(current, max int) {
+func (s *step) echo(current, maximum int) {
 	p := color.White.Darken().Sprintf
 	if s.r.options.NoColor {
 		p = fmt.Sprintf
@@ -239,7 +239,7 @@ func (s *step) echo(current, max int) {
 				prepared,
 				p(
 					"# %s [%d/%d]%s\n",
-					x, current, max, colon,
+					x, current, maximum, colon,
 				),
 			)
 		} else {
@@ -287,8 +287,9 @@ func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		for _, c := range m {
 			if !s.r.options.Immediate {
+				const maximum = 40
 				//nolint:gosec,gomnd // the sleep has no security implications and is randomly chosen
-				time.Sleep(time.Duration(rand.Intn(40)) * time.Millisecond)
+				time.Sleep(time.Duration(rand.Intn(maximum)) * time.Millisecond)
 			}
 			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {
 				return err
