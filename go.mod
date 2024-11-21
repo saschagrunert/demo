@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/gookit/color v1.5.4
-	github.com/onsi/ginkgo/v2 v2.21.0
+	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.35.1
 	github.com/urfave/cli/v2 v2.27.5
 )
