@@ -40,7 +40,7 @@ test:
 
 ${GOLANGCI_LINT}:
 	export \
-		VERSION=v1.61.0 \
+		VERSION=v1.64.6 \
 		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
 		BINDIR=${BUILD_PATH} && \
 	curl -sfL $$URL/$$VERSION/install.sh | sh -s $$VERSION

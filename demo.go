@@ -143,11 +143,13 @@ func New() *Demo {
 
 		for _, x := range demo.runs {
 			isSet := false
+
 			for _, name := range x.flag.Names() {
 				if ctx.Bool(name) {
 					isSet = true
 				}
 			}
+
 			if ctx.Bool(FlagAll) || isSet {
 				runFns = append(runFns, x.run.Run)
 			}
@@ -158,9 +160,11 @@ func New() *Demo {
 				if err := demo.setup(ctx); err != nil {
 					return err
 				}
+
 				if err := runFn(ctx); err != nil {
 					return err
 				}
+
 				if err := demo.cleanup(ctx); err != nil {
 					return err
 				}
@@ -168,6 +172,7 @@ func New() *Demo {
 
 			return nil
 		}
+
 		if ctx.Bool(FlagContinuously) {
 			for {
 				if err := runSelected(); err != nil {
@@ -207,11 +212,13 @@ func (d *Demo) Run() {
 	// Catch interrupts and cleanup
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
+
 	go func() {
 		for range c {
 			if err := d.cleanup(nil); err != nil {
 				log.Printf("unable to cleanup: %v", err)
 			}
+
 			os.Exit(0)
 		}
 	}()

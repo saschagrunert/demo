@@ -91,6 +91,7 @@ func (r *Run) SetOutput(output io.Writer) error {
 	if output == nil {
 		return errOutputNil
 	}
+
 	r.out = output
 
 	return nil
@@ -141,6 +142,7 @@ func (r *Run) RunWithOptions(opts Options) error {
 	if err := r.printTitleAndDescription(); err != nil {
 		return err
 	}
+
 	for i, step := range r.steps {
 		if r.options.SkipSteps > i {
 			continue
@@ -149,6 +151,7 @@ func (r *Run) RunWithOptions(opts Options) error {
 		if r.options.ContinueOnError {
 			step.canFail = true
 		}
+
 		if err := step.run(i+1, len(r.steps)); err != nil {
 			return err
 		}
@@ -162,17 +165,21 @@ func (r *Run) printTitleAndDescription() error {
 	if r.options.NoColor {
 		p = fmt.Sprintf
 	}
+
 	if err := write(r.out, p("%s\n", r.title)); err != nil {
 		return err
 	}
+
 	for range r.title {
 		if err := write(r.out, p("=")); err != nil {
 			return err
 		}
 	}
+
 	if err := write(r.out, "\n"); err != nil {
 		return err
 	}
+
 	if !r.options.HideDescriptions {
 		p = color.White.Darken().Sprintf
 		if r.options.NoColor {
@@ -186,6 +193,7 @@ func (r *Run) printTitleAndDescription() error {
 				return err
 			}
 		}
+
 		if err := write(r.out, "\n"); err != nil {
 			return err
 		}
@@ -207,12 +215,15 @@ func (s *step) run(current, maximum int) error {
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to run step: %v: %w", s, err)
 	}
+
 	if len(s.text) > 0 && !s.r.options.HideDescriptions {
 		s.echo(current, maximum)
 	}
+
 	if s.isBreakPoint {
 		return s.wait()
 	}
+
 	if len(s.command) > 0 {
 		return s.execute()
 	}
@@ -227,6 +238,7 @@ func (s *step) echo(current, maximum int) {
 	}
 
 	prepared := []string{}
+
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
 			colon := ":"
@@ -235,6 +247,7 @@ func (s *step) echo(current, maximum int) {
 				// provided.
 				colon = ""
 			}
+
 			prepared = append(
 				prepared,
 				p(
@@ -247,6 +260,7 @@ func (s *step) echo(current, maximum int) {
 			prepared = append(prepared, m)
 		}
 	}
+
 	s.print(prepared...)
 }
 
@@ -264,16 +278,21 @@ func (s *step) execute() error {
 
 	cmdString := p("> %s", strings.Join(s.command, " \\\n    "))
 	s.print(cmdString)
+
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to execute step: %v: %w", s, err)
 	}
+
 	if s.r.options.DryRun {
 		return nil
 	}
+
 	err := cmd.Run()
+
 	if s.canFail {
 		return nil
 	}
+
 	s.print("")
 
 	if err != nil {
@@ -291,10 +310,12 @@ func (s *step) print(msg ...string) error {
 				//nolint:gosec,gomnd // the sleep has no security implications and is randomly chosen
 				time.Sleep(time.Duration(rand.Intn(maximum)) * time.Millisecond)
 			}
+
 			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {
 				return err
 			}
 		}
+
 		if err := write(s.r.out, "\n"); err != nil {
 			return err
 		}
@@ -310,6 +331,7 @@ func (s *step) waitOrSleep() error {
 		if err := write(s.r.out, "…"); err != nil {
 			return err
 		}
+
 		_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
 		if err != nil {
 			return fmt.Errorf("unable to read newline: %w", err)
@@ -331,6 +353,7 @@ func (s *step) wait() error {
 	if err := write(s.r.out, "bp"); err != nil {
 		return err
 	}
+
 	_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
 	if err != nil {
 		return fmt.Errorf("unable to read newline: %w", err)
