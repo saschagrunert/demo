@@ -12,6 +12,7 @@ func Ensure(commands ...string) error {
 		cmd := exec.Command("sh", "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
+
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("run command: %w", err)
 		}

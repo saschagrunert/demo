@@ -31,7 +31,6 @@ func NilFunc(*TestFramework) error {
 // suite.
 func (t *TestFramework) Setup() {
 	// Global initialization for the whole framework goes in here
-
 	// Setup the actual test suite
 	gomega.Expect(t.setup(t)).To(gomega.Succeed())
 }
@@ -40,7 +39,6 @@ func (t *TestFramework) Setup() {
 // suite.
 func (t *TestFramework) Teardown() {
 	// Global deinitialization for the whole framework goes in here
-
 	// Teardown the actual test suite
 	gomega.Expect(t.teardown(t)).To(gomega.Succeed())
 }
