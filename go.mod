@@ -5,7 +5,7 @@ go 1.24
 require (
 	github.com/gookit/color v1.5.4
 	github.com/onsi/ginkgo/v2 v2.23.3
-	github.com/onsi/gomega v1.36.3
+	github.com/onsi/gomega v1.37.0
 	github.com/urfave/cli/v2 v2.27.6
 )
 
