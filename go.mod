@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/gookit/color v1.5.4
 	github.com/onsi/ginkgo/v2 v2.25.1
-	github.com/onsi/gomega v1.38.1
+	github.com/onsi/gomega v1.38.2
 	github.com/urfave/cli/v2 v2.27.7
 )
 
