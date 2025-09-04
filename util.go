@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 )
@@ -9,7 +10,7 @@ import (
 // This utility function can be used during setup or cleanup.
 func Ensure(commands ...string) error {
 	for _, c := range commands {
-		cmd := exec.Command("sh", "-c", c)
+		cmd := exec.CommandContext(context.Background(), "sh", "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
 

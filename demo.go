@@ -12,6 +12,7 @@ import (
 
 type Demo struct {
 	*cli.App
+
 	runs    []*runFlag
 	setup   func(*cli.Context) error
 	cleanup func(*cli.Context) error

@@ -1,10 +1,11 @@
 ---
+version: "2"
 run:
   concurrency: 6
-  timeout: 5m
 linters:
-  disable-all: true
+  default: none
   enable:
+    - arangolint
     - asasalint
     - asciicheck
     - bidichk
@@ -19,6 +20,7 @@ linters:
     - dupl
     - dupword
     - durationcheck
+    - embeddedstructfieldcheck
     - err113
     - errcheck
     - errchkjson
@@ -29,8 +31,8 @@ linters:
     - fatcontext
     - forbidigo
     - forcetypeassert
+    - funcorder
     - funlen
-    - gci
     - ginkgolinter
     - gocheckcompilerdirectives
     - gochecknoglobals
@@ -42,15 +44,11 @@ linters:
     - gocyclo
     - godot
     - godox
-    - gofmt
-    - gofumpt
     - goheader
-    - goimports
     - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
-    - gosimple
     - gosmopolitan
     - govet
     - grouper
@@ -93,7 +91,6 @@ linters:
     - spancheck
     - sqlclosecheck
     - staticcheck
-    - stylecheck
     - tagalign
     - tagliatelle
     - testableexamples
@@ -101,7 +98,6 @@ linters:
     - testpackage
     - thelper
     - tparallel
-    - typecheck
     - unconvert
     - unparam
     - unused
@@ -110,21 +106,52 @@ linters:
     - wastedassign
     - whitespace
     - wrapcheck
-    - wsl
+    - wsl_v5
     - zerologlint
     # - depguard
     # - exhaustruct
+    # - noinlineerr
     # - varnamelen
-linters-settings:
-  funlen:
-    lines: 150
-  cyclop:
-    max-complexity: 15
-  gocognit:
-    min-complexity: 40
-  revive:
-    rules:
-      - name: dot-imports
-        disabled: true
-  gocritic:
-    enable-all: true
+  settings:
+    staticcheck:
+      dot-import-whitelist:
+        - github.com/saschagrunert/demo
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 150
+    gocognit:
+      min-complexity: 40
+    gocritic:
+      enable-all: true
+    revive:
+      rules:
+        - name: dot-imports
+          disabled: true
+    wsl_v5:
+      allow-first-in-block: true
+      allow-whole-block: false
+      branch-max-lines: 2
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

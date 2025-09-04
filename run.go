@@ -2,6 +2,7 @@ package demo
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +39,9 @@ type step struct {
 
 // Options specify the run options.
 type Options struct {
+	//nolint:containedctx // this is intentional
+	context context.Context
+
 	AutoTimeout      time.Duration
 	Auto             bool
 	BreakPoint       bool
@@ -68,6 +72,7 @@ func NewRun(title string, description ...string) *Run {
 // optionsFrom creates a new set of options from the provided context.
 func optionsFrom(ctx *cli.Context) Options {
 	return Options{
+		context:          ctx.Context,
 		AutoTimeout:      ctx.Duration(FlagAutoTimeout),
 		Auto:             ctx.Bool(FlagAuto),
 		BreakPoint:       ctx.Bool(FlagBreakPoint),
@@ -129,6 +134,10 @@ func (r *Run) Run(ctx *cli.Context) error {
 
 // RunWithOptions executes the run with the provided Options.
 func (r *Run) RunWithOptions(opts Options) error {
+	if opts.context == nil {
+		opts.context = context.Background()
+	}
+
 	if opts.Shell == "" {
 		opts.Shell = "bash"
 	}
@@ -152,7 +161,7 @@ func (r *Run) RunWithOptions(opts Options) error {
 			step.canFail = true
 		}
 
-		if err := step.run(i+1, len(r.steps)); err != nil {
+		if err := step.run(opts.context, i+1, len(r.steps)); err != nil {
 			return err
 		}
 	}
@@ -211,7 +220,7 @@ func write(w io.Writer, str string) error {
 	return nil
 }
 
-func (s *step) run(current, maximum int) error {
+func (s *step) run(ctx context.Context, current, maximum int) error {
 	if err := s.waitOrSleep(); err != nil {
 		return fmt.Errorf("unable to run step: %v: %w", s, err)
 	}
@@ -225,7 +234,7 @@ func (s *step) run(current, maximum int) error {
 	}
 
 	if len(s.command) > 0 {
-		return s.execute()
+		return s.execute(ctx)
 	}
 
 	return nil
@@ -264,9 +273,10 @@ func (s *step) echo(current, maximum int) {
 	s.print(prepared...)
 }
 
-func (s *step) execute() error {
+func (s *step) execute(ctx context.Context) error {
 	joinedCommand := strings.Join(s.command, " ")
-	cmd := exec.Command(s.r.options.Shell, "-c", joinedCommand) //nolint:gosec // we purposefully run user-provided code
+	//nolint:gosec // we purposefully run user-provided code
+	cmd := exec.CommandContext(ctx, s.r.options.Shell, "-c", joinedCommand)
 
 	cmd.Stderr = s.r.out
 	cmd.Stdout = s.r.out
@@ -307,7 +317,7 @@ func (s *step) print(msg ...string) error {
 		for _, c := range m {
 			if !s.r.options.Immediate {
 				const maximum = 40
-				//nolint:gosec,gomnd // the sleep has no security implications and is randomly chosen
+				//nolint:gosec // the sleep has no security implications and is randomly chosen
 				time.Sleep(time.Duration(rand.Intn(maximum)) * time.Millisecond)
 			}
 
