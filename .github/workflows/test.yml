@@ -58,5 +58,7 @@ jobs:
       - run: make test
       - uses: codecov/codecov-action@v5
         with:
-          files: ./build/coverage/coverprofile
+          files: build/coverage/coverprofile
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
           fail_ci_if_error: false

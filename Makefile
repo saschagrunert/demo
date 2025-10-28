@@ -31,7 +31,7 @@ codecov:
 test:
 	rm -rf $(COVERAGE_PATH) && mkdir -p $(COVERAGE_PATH)
 	$(GO) run github.com/onsi/ginkgo/v2/ginkgo run $(TESTFLAGS) \
-		-r -p \
+		-r \
 		--cover \
 		--randomize-all \
 		--randomize-suites \
