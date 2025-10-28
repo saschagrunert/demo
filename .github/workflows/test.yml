@@ -56,7 +56,7 @@ jobs:
           key: go-test-${{ hashFiles('**/go.sum') }}
           restore-keys: go-test-
       - run: make test
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v5
         with:
           files: ./build/coverage/coverprofile
           fail_ci_if_error: false
