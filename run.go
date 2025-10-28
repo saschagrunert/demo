@@ -26,7 +26,7 @@ type Run struct {
 	description []string
 	steps       []step
 	out         io.Writer
-	options     *Options
+	options     Options
 	setup       func() error
 	cleanup     func() error
 }
@@ -52,6 +52,11 @@ type Options struct {
 	Immediate        bool
 	SkipSteps        int
 	Shell            string
+
+	// Cached color functions to avoid repeated conditionals
+	cyanPrintf  func(format string, a ...interface{}) string
+	whitePrintf func(format string, a ...interface{}) string
+	greenPrintf func(format string, a ...interface{}) string
 }
 
 func emptyFn() error { return nil }
@@ -63,7 +68,7 @@ func NewRun(title string, description ...string) *Run {
 		description: description,
 		steps:       nil,
 		out:         os.Stdout,
-		options:     nil,
+		options:     Options{},
 		setup:       emptyFn,
 		cleanup:     emptyFn,
 	}
@@ -71,7 +76,8 @@ func NewRun(title string, description ...string) *Run {
 
 // optionsFrom creates a new set of options from the provided context.
 func optionsFrom(ctx *cli.Context) Options {
-	return Options{
+	noColor := ctx.Bool(FlagNoColor)
+	opts := Options{
 		context:          ctx.Context,
 		AutoTimeout:      ctx.Duration(FlagAutoTimeout),
 		Auto:             ctx.Bool(FlagAuto),
@@ -79,11 +85,24 @@ func optionsFrom(ctx *cli.Context) Options {
 		ContinueOnError:  ctx.Bool(FlagContinueOnError),
 		HideDescriptions: ctx.Bool(FlagHideDescriptions),
 		DryRun:           ctx.Bool(FlagDryRun),
-		NoColor:          ctx.Bool(FlagNoColor),
+		NoColor:          noColor,
 		Immediate:        ctx.Bool(FlagImmediate),
 		SkipSteps:        ctx.Int(FlagSkipSteps),
 		Shell:            ctx.String(FlagShell),
 	}
+
+	// Cache color functions based on NoColor setting
+	if noColor {
+		opts.cyanPrintf = fmt.Sprintf
+		opts.whitePrintf = fmt.Sprintf
+		opts.greenPrintf = fmt.Sprintf
+	} else {
+		opts.cyanPrintf = color.Cyan.Sprintf
+		opts.whitePrintf = color.White.Darken().Sprintf
+		opts.greenPrintf = color.Green.Sprintf
+	}
+
+	return opts
 }
 
 // S is a short-hand for converting string slice syntaxes.
@@ -129,11 +148,13 @@ func (r *Run) BreakPoint() {
 
 // Run executes the run in the provided CLI context.
 func (r *Run) Run(ctx *cli.Context) error {
-	return r.RunWithOptions(optionsFrom(ctx))
+	opts := optionsFrom(ctx)
+
+	return r.RunWithOptions(&opts)
 }
 
 // RunWithOptions executes the run with the provided Options.
-func (r *Run) RunWithOptions(opts Options) error {
+func (r *Run) RunWithOptions(opts *Options) error {
 	if opts.context == nil {
 		opts.context = context.Background()
 	}
@@ -142,11 +163,24 @@ func (r *Run) RunWithOptions(opts Options) error {
 		opts.Shell = "bash"
 	}
 
+	// Initialize color functions if not set
+	if opts.cyanPrintf == nil {
+		if opts.NoColor {
+			opts.cyanPrintf = fmt.Sprintf
+			opts.whitePrintf = fmt.Sprintf
+			opts.greenPrintf = fmt.Sprintf
+		} else {
+			opts.cyanPrintf = color.Cyan.Sprintf
+			opts.whitePrintf = color.White.Darken().Sprintf
+			opts.greenPrintf = color.Green.Sprintf
+		}
+	}
+
 	if err := r.setup(); err != nil {
 		return err
 	}
 
-	r.options = &opts
+	r.options = *opts
 
 	if err := r.printTitleAndDescription(); err != nil {
 		return err
@@ -170,17 +204,12 @@ func (r *Run) RunWithOptions(opts Options) error {
 }
 
 func (r *Run) printTitleAndDescription() error {
-	p := color.Cyan.Sprintf
-	if r.options.NoColor {
-		p = fmt.Sprintf
-	}
-
-	if err := write(r.out, p("%s\n", r.title)); err != nil {
+	if err := write(r.out, r.options.cyanPrintf("%s\n", r.title)); err != nil {
 		return err
 	}
 
 	for range r.title {
-		if err := write(r.out, p("=")); err != nil {
+		if err := write(r.out, r.options.cyanPrintf("=")); err != nil {
 			return err
 		}
 	}
@@ -190,14 +219,9 @@ func (r *Run) printTitleAndDescription() error {
 	}
 
 	if !r.options.HideDescriptions {
-		p = color.White.Darken().Sprintf
-		if r.options.NoColor {
-			p = fmt.Sprintf
-		}
-
 		for _, d := range r.description {
 			if err := write(
-				r.out, p("%s\n", d),
+				r.out, r.options.whitePrintf("%s\n", d),
 			); err != nil {
 				return err
 			}
@@ -241,12 +265,7 @@ func (s *step) run(ctx context.Context, current, maximum int) error {
 }
 
 func (s *step) echo(current, maximum int) {
-	p := color.White.Darken().Sprintf
-	if s.r.options.NoColor {
-		p = fmt.Sprintf
-	}
-
-	prepared := make([]string, 0, len(s.text))
+	prepared := make([]string, len(s.text))
 
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
@@ -257,16 +276,12 @@ func (s *step) echo(current, maximum int) {
 				colon = ""
 			}
 
-			prepared = append(
-				prepared,
-				p(
-					"# %s [%d/%d]%s\n",
-					x, current, maximum, colon,
-				),
+			prepared[i] = s.r.options.whitePrintf(
+				"# %s [%d/%d]%s\n",
+				x, current, maximum, colon,
 			)
 		} else {
-			m := p("# %s", x)
-			prepared = append(prepared, m)
+			prepared[i] = s.r.options.whitePrintf("# %s", x)
 		}
 	}
 
@@ -281,12 +296,7 @@ func (s *step) execute(ctx context.Context) error {
 	cmd.Stderr = s.r.out
 	cmd.Stdout = s.r.out
 
-	p := color.Green.Sprintf
-	if s.r.options.NoColor {
-		p = fmt.Sprintf
-	}
-
-	cmdString := p("> %s", strings.Join(s.command, " \\\n    "))
+	cmdString := s.r.options.greenPrintf("> %s", strings.Join(s.command, " \\\n    "))
 	s.print(cmdString)
 
 	if err := s.waitOrSleep(); err != nil {

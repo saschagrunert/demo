@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -64,12 +65,8 @@ const (
 	FlagShell = "shell"
 )
 
-// New creates a new Demo instance.
-func New() *Demo {
-	app := cli.NewApp()
-	app.UseShortOptionHandling = true
-
-	app.Flags = []cli.Flag{
+func createFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.BoolFlag{
 			Name:    FlagAll,
 			Aliases: []string{"l"},
@@ -130,6 +127,68 @@ func New() *Demo {
 			DefaultText: "bash",
 		},
 	}
+}
+
+func collectRunFunctions(ctx *cli.Context, runs []*runFlag) []cli.ActionFunc {
+	runFns := make([]cli.ActionFunc, 0, len(runs))
+
+	for _, x := range runs {
+		if isFlagSet(ctx, x.flag) || ctx.Bool(FlagAll) {
+			runFns = append(runFns, x.run.Run)
+		}
+	}
+
+	return runFns
+}
+
+func isFlagSet(ctx *cli.Context, flag cli.Flag) bool {
+	for _, name := range flag.Names() {
+		if ctx.Bool(name) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func createRunSelected(demo *Demo, ctx *cli.Context, runFns []cli.ActionFunc) func() error {
+	return func() error {
+		for _, runFn := range runFns {
+			if err := demo.setup(ctx); err != nil {
+				return err
+			}
+
+			if err := runFn(ctx); err != nil {
+				return err
+			}
+
+			if err := demo.cleanup(ctx); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+}
+
+func runContinuously(ctx *cli.Context, runSelected func() error) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled: %w", ctx.Err())
+		default:
+			if err := runSelected(); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// New creates a new Demo instance.
+func New() *Demo {
+	app := cli.NewApp()
+	app.UseShortOptionHandling = true
+	app.Flags = createFlags()
 
 	emptyFn := func(*cli.Context) error { return nil }
 	demo := &Demo{
@@ -140,46 +199,11 @@ func New() *Demo {
 	}
 
 	app.Action = func(ctx *cli.Context) error {
-		runFns := make([]cli.ActionFunc, 0, len(demo.runs))
-
-		for _, x := range demo.runs {
-			isSet := false
-
-			for _, name := range x.flag.Names() {
-				if ctx.Bool(name) {
-					isSet = true
-				}
-			}
-
-			if ctx.Bool(FlagAll) || isSet {
-				runFns = append(runFns, x.run.Run)
-			}
-		}
-
-		runSelected := func() error {
-			for _, runFn := range runFns {
-				if err := demo.setup(ctx); err != nil {
-					return err
-				}
-
-				if err := runFn(ctx); err != nil {
-					return err
-				}
-
-				if err := demo.cleanup(ctx); err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}
+		runFns := collectRunFunctions(ctx, demo.runs)
+		runSelected := createRunSelected(demo, ctx, runFns)
 
 		if ctx.Bool(FlagContinuously) {
-			for {
-				if err := runSelected(); err != nil {
-					return err
-				}
-			}
+			return runContinuously(ctx, runSelected)
 		}
 
 		return runSelected()
@@ -214,20 +238,32 @@ func (d *Demo) Run() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
-	go func() {
-		for range c {
-			// Create a minimal context for cleanup on interrupt
-			ctx := cli.NewContext(d.App, nil, nil)
-			if err := d.cleanup(ctx); err != nil {
-				log.Printf("unable to cleanup: %v", err)
-			}
+	done := make(chan bool)
 
-			os.Exit(0)
+	go func() {
+		for {
+			select {
+			case <-c:
+				// Create a minimal context for cleanup on interrupt
+				ctx := cli.NewContext(d.App, nil, nil)
+				if err := d.cleanup(ctx); err != nil {
+					log.Printf("unable to cleanup: %v", err)
+				}
+
+				os.Exit(0)
+			case <-done:
+				return
+			}
 		}
 	}()
 
 	if err := d.App.Run(os.Args); err != nil {
 		log.Printf("run failed: %v", err)
+		signal.Stop(c)
+		close(done)
 		os.Exit(1)
 	}
+
+	signal.Stop(c)
+	close(done)
 }
