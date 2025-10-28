@@ -52,6 +52,7 @@ type Options struct {
 	Immediate        bool
 	SkipSteps        int
 	Shell            string
+	TypewriterSpeed  int
 
 	// Cached color functions to avoid repeated conditionals
 	cyanPrintf  func(format string, a ...interface{}) string
@@ -89,6 +90,7 @@ func optionsFrom(ctx *cli.Context) Options {
 		Immediate:        ctx.Bool(FlagImmediate),
 		SkipSteps:        ctx.Int(FlagSkipSteps),
 		Shell:            ctx.String(FlagShell),
+		TypewriterSpeed:  ctx.Int(FlagTypewriterSpeed),
 	}
 
 	// Cache color functions based on NoColor setting
@@ -161,6 +163,10 @@ func (r *Run) RunWithOptions(opts *Options) error {
 
 	if opts.Shell == "" {
 		opts.Shell = "bash"
+	}
+
+	if opts.TypewriterSpeed == 0 {
+		opts.TypewriterSpeed = DefaultTypewriterSpeed
 	}
 
 	// Initialize color functions if not set
@@ -246,7 +252,7 @@ func write(w io.Writer, str string) error {
 
 func (s *step) run(ctx context.Context, current, maximum int) error {
 	if err := s.waitOrSleep(); err != nil {
-		return fmt.Errorf("unable to run step: %v: %w", s, err)
+		return fmt.Errorf("unable to run step: %w", err)
 	}
 
 	if len(s.text) > 0 && !s.r.options.HideDescriptions {
@@ -296,11 +302,13 @@ func (s *step) execute(ctx context.Context) error {
 	cmd.Stderr = s.r.out
 	cmd.Stdout = s.r.out
 
-	cmdString := s.r.options.greenPrintf("> %s", strings.Join(s.command, " \\\n    "))
+	// Format command display with line continuations
+	displayCommand := strings.Join(s.command, " \\\n    ")
+	cmdString := s.r.options.greenPrintf("> %s", displayCommand)
 	s.print(cmdString)
 
 	if err := s.waitOrSleep(); err != nil {
-		return fmt.Errorf("unable to execute step: %v: %w", s, err)
+		return fmt.Errorf("unable to execute step: %w", err)
 	}
 
 	if s.r.options.DryRun {
@@ -325,13 +333,13 @@ func (s *step) execute(ctx context.Context) error {
 func (s *step) print(msg ...string) error {
 	for _, m := range msg {
 		var buf strings.Builder
+		// Pre-allocate for UTF-8: len(m) gives byte count which is the actual size needed
 		buf.Grow(len(m))
 
 		for _, c := range m {
 			if !s.r.options.Immediate {
-				const maximum = 40
 				//nolint:gosec // random sleep timing for visual effect, not security-sensitive
-				time.Sleep(time.Duration(rand.IntN(maximum)) * time.Millisecond)
+				time.Sleep(time.Duration(rand.IntN(s.r.options.TypewriterSpeed)) * time.Millisecond)
 			}
 
 			buf.WriteRune(c)

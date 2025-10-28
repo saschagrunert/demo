@@ -1,6 +1,7 @@
 package demo
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -63,6 +64,12 @@ const (
 
 	// FlagShell is the flag for defining the shell that is used to execute the command(s).
 	FlagShell = "shell"
+
+	// FlagTypewriterSpeed is the flag for configuring typewriter animation speed (max milliseconds per character).
+	FlagTypewriterSpeed = "typewriter-speed"
+
+	// DefaultTypewriterSpeed is the default maximum milliseconds per character for typewriter animation.
+	DefaultTypewriterSpeed = 40
 )
 
 func createFlags() []cli.Flag {
@@ -126,6 +133,11 @@ func createFlags() []cli.Flag {
 			Usage:       "define the shell that is used to execute the command(s)",
 			DefaultText: "bash",
 		},
+		&cli.IntFlag{
+			Name:  FlagTypewriterSpeed,
+			Usage: "maximum milliseconds per character for typewriter animation",
+			Value: DefaultTypewriterSpeed,
+		},
 	}
 }
 
@@ -173,13 +185,12 @@ func createRunSelected(demo *Demo, ctx *cli.Context, runFns []cli.ActionFunc) fu
 
 func runContinuously(ctx *cli.Context, runSelected func() error) error {
 	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled: %w", ctx.Err())
-		default:
-			if err := runSelected(); err != nil {
-				return err
-			}
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("context cancelled: %w", err)
+		}
+
+		if err := runSelected(); err != nil {
+			return err
 		}
 	}
 }
@@ -234,36 +245,37 @@ func (d *Demo) Add(run *Run, name, description string) {
 
 // Run starts the demo.
 func (d *Demo) Run() {
-	// Catch interrupts and cleanup
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
+	// Create context that cancels on interrupt signal
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 
-	done := make(chan bool)
+	done := make(chan bool, 1)
 
+	// Handle interrupt signal for cleanup
 	go func() {
-		for {
-			select {
-			case <-c:
+		select {
+		case <-ctx.Done():
+			// Only exit if context was cancelled due to interrupt signal
+			if context.Cause(ctx) != nil {
 				// Create a minimal context for cleanup on interrupt
-				ctx := cli.NewContext(d.App, nil, nil)
-				if err := d.cleanup(ctx); err != nil {
+				cleanupCtx := cli.NewContext(d.App, nil, nil)
+				if err := d.cleanup(cleanupCtx); err != nil {
 					log.Printf("unable to cleanup: %v", err)
 				}
 
 				os.Exit(0)
-			case <-done:
-				return
 			}
+		case <-done:
+			return
 		}
 	}()
 
-	if err := d.App.Run(os.Args); err != nil {
+	err := d.App.Run(os.Args)
+
+	close(done)
+	stop() // Ensure cleanup before potential os.Exit
+
+	if err != nil {
 		log.Printf("run failed: %v", err)
-		signal.Stop(c)
-		close(done)
 		os.Exit(1)
 	}
-
-	signal.Stop(c)
-	close(done)
 }

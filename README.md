@@ -63,6 +63,7 @@ GLOBAL OPTIONS:
    --immediate, -i               immediately output without the typewriter animation (default: false)
    --skip-steps value, -s value  skip the amount of initial steps within the demo (default: 0)
    --shell value                 define the shell that is used to execute the command(s) (default: bash)
+   --typewriter-speed value      maximum milliseconds per character for typewriter animation (default: 40)
    --help, -h                    show help (default: false)
    --version, -v                 print the version (default: false)
 ```
