@@ -38,7 +38,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run", func() {
 		// Given
 		// When
-		err := sut.RunWithOptions(opts)
+		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
@@ -56,7 +56,7 @@ var _ = t.Describe("Run", func() {
 		sut.Step(demo.S(descriptionText), demo.S(command))
 
 		// When
-		err := sut.RunWithOptions(opts)
+		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
@@ -76,7 +76,7 @@ var _ = t.Describe("Run", func() {
 		sut.StepCanFail(demo.S(descriptionText), demo.S(command))
 
 		// When
-		err := sut.RunWithOptions(opts)
+		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())

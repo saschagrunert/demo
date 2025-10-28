@@ -6,11 +6,11 @@ import (
 	"os/exec"
 )
 
-// Ensure executes the provided commands in order.
+// EnsureWithContext executes the provided commands in order with the given context.
 // This utility function can be used during setup or cleanup.
-func Ensure(commands ...string) error {
+func EnsureWithContext(ctx context.Context, commands ...string) error {
 	for _, c := range commands {
-		cmd := exec.CommandContext(context.Background(), "sh", "-c", c)
+		cmd := exec.CommandContext(ctx, "sh", "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
 
@@ -20,6 +20,12 @@ func Ensure(commands ...string) error {
 	}
 
 	return nil
+}
+
+// Ensure executes the provided commands in order.
+// This utility function can be used during setup or cleanup.
+func Ensure(commands ...string) error {
+	return EnsureWithContext(context.Background(), commands...)
 }
 
 // MustEnsure executes the provided commands in order and panics on failure.
