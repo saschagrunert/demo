@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"strings"
@@ -246,7 +246,7 @@ func (s *step) echo(current, maximum int) {
 		p = fmt.Sprintf
 	}
 
-	prepared := []string{}
+	prepared := make([]string, 0, len(s.text))
 
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
@@ -314,16 +314,21 @@ func (s *step) execute(ctx context.Context) error {
 
 func (s *step) print(msg ...string) error {
 	for _, m := range msg {
+		var buf strings.Builder
+		buf.Grow(len(m))
+
 		for _, c := range m {
 			if !s.r.options.Immediate {
 				const maximum = 40
-				//nolint:gosec // the sleep has no security implications and is randomly chosen
-				time.Sleep(time.Duration(rand.Intn(maximum)) * time.Millisecond)
+				//nolint:gosec // random sleep timing for visual effect, not security-sensitive
+				time.Sleep(time.Duration(rand.IntN(maximum)) * time.Millisecond)
 			}
 
-			if err := write(s.r.out, fmt.Sprintf("%c", c)); err != nil {
-				return err
-			}
+			buf.WriteRune(c)
+		}
+
+		if err := write(s.r.out, buf.String()); err != nil {
+			return err
 		}
 
 		if err := write(s.r.out, "\n"); err != nil {

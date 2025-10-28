@@ -140,7 +140,7 @@ func New() *Demo {
 	}
 
 	app.Action = func(ctx *cli.Context) error {
-		runFns := []cli.ActionFunc{}
+		runFns := make([]cli.ActionFunc, 0, len(demo.runs))
 
 		for _, x := range demo.runs {
 			isSet := false
@@ -216,7 +216,9 @@ func (d *Demo) Run() {
 
 	go func() {
 		for range c {
-			if err := d.cleanup(nil); err != nil {
+			// Create a minimal context for cleanup on interrupt
+			ctx := cli.NewContext(d.App, nil, nil)
+			if err := d.cleanup(ctx); err != nil {
 				log.Printf("unable to cleanup: %v", err)
 			}
 

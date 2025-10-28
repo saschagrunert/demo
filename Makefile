@@ -5,8 +5,12 @@ COVERAGE_PATH := $(BUILD_PATH)/coverage
 
 GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
 
+# Build flags: strip symbols only in release mode
+# For development builds, omit -s -w to preserve debug symbols
+LDFLAGS ?= -s -w
+
 define go-build
-	cd `pwd` && $(GO) build -ldflags '-s -w $(2)' \
+	cd `pwd` && $(GO) build -ldflags '$(LDFLAGS) $(2)' \
 		-o $(BUILD_PATH)/$(shell basename $(1)) $(1)
 	@echo > /dev/null
 endef
