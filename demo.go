@@ -47,7 +47,7 @@ const (
 	// any end.
 	FlagContinuously = "continuously"
 
-	// DryRun only prints the command in the stdout.
+	// FlagDryRun only prints the command in the stdout.
 	FlagDryRun = "dry-run"
 
 	// FlagHideDescriptions is the flag for hiding the descriptions.
@@ -56,7 +56,7 @@ const (
 	// FlagImmediate is the flag for disabling the text animations.
 	FlagImmediate = "immediate"
 
-	// NoColor true to print without colors, special characters for writing into file.
+	// FlagNoColor true to print without colors, special characters for writing into file.
 	FlagNoColor = "no-color"
 
 	// FlagSkipSteps is the flag for skipping n amount of steps.
