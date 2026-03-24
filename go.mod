@@ -4,10 +4,12 @@ go 1.26
 
 require (
 	github.com/fatih/color v1.19.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/onsi/ginkgo/v2 v2.28.1
 	github.com/onsi/gomega v1.39.1
 	github.com/saschagrunert/ccli/v3 v3.0.0
 	github.com/urfave/cli/v3 v3.7.0
+	golang.org/x/term v0.41.0
 )
 
 require (
@@ -17,7 +19,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
