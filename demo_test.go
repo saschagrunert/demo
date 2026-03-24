@@ -30,7 +30,7 @@ func withArgs(args []string, fn func()) {
 	fn()
 }
 
-var _ = t.Describe("Demo", func() {
+var _ = Describe("Demo", func() {
 	It("should succeed to run", func() {
 		withArgs([]string{"demo"}, func() {
 			sut := demo.New()

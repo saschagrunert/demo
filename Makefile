@@ -50,11 +50,6 @@ clean: ## Remove build artifacts.
 
 ##@ Testing:
 
-.PHONY: codecov
-codecov: SHELL := $(shell which bash)
-codecov: ## Upload coverage to codecov.
-	bash <(curl -s https://codecov.io/bash) -f $(COVERAGE_PATH)/coverprofile
-
 .PHONY: test
 test: ## Run tests with coverage.
 	rm -rf $(COVERAGE_PATH) && mkdir -p $(COVERAGE_PATH)
