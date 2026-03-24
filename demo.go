@@ -6,18 +6,18 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/saschagrunert/ccli/v3"
+	"github.com/urfave/cli/v3"
 )
 
 type Demo struct {
-	*cli.App
+	*cli.Command
 
 	runs    []*runFlag
-	setup   func(*cli.Context) error
-	cleanup func(*cli.Context) error
+	setup   func(context.Context, *cli.Command) error
+	cleanup func(context.Context, *cli.Command) error
 }
 
 type runFlag struct {
@@ -36,7 +36,7 @@ const (
 	// enabled.
 	FlagAutoTimeout = "auto-timeout"
 
-	// FlagBreakPoint is the flag for doing`auto` but with breakpoint.
+	// FlagBreakPoint is the flag for doing `auto` but with breakpoint.
 	FlagBreakPoint = "with-breakpoints"
 
 	// FlagContinueOnError is the flag for steps continue running if
@@ -141,11 +141,11 @@ func createFlags() []cli.Flag {
 	}
 }
 
-func collectRunFunctions(ctx *cli.Context, runs []*runFlag) []cli.ActionFunc {
-	runFns := make([]cli.ActionFunc, 0, len(runs))
+func collectRunFunctions(cmd *cli.Command, runs []*runFlag) []runAction {
+	runFns := make([]runAction, 0, len(runs))
 
 	for _, x := range runs {
-		if isFlagSet(ctx, x.flag) || ctx.Bool(FlagAll) {
+		if isFlagSet(cmd, x.flag) || cmd.Bool(FlagAll) {
 			runFns = append(runFns, x.run.Run)
 		}
 	}
@@ -153,9 +153,11 @@ func collectRunFunctions(ctx *cli.Context, runs []*runFlag) []cli.ActionFunc {
 	return runFns
 }
 
-func isFlagSet(ctx *cli.Context, flag cli.Flag) bool {
+type runAction func(context.Context, *cli.Command) error
+
+func isFlagSet(cmd *cli.Command, flag cli.Flag) bool {
 	for _, name := range flag.Names() {
-		if ctx.Bool(name) {
+		if cmd.Bool(name) {
 			return true
 		}
 	}
@@ -163,18 +165,18 @@ func isFlagSet(ctx *cli.Context, flag cli.Flag) bool {
 	return false
 }
 
-func createRunSelected(demo *Demo, ctx *cli.Context, runFns []cli.ActionFunc) func() error {
+func createRunSelected(demo *Demo, ctx context.Context, cmd *cli.Command, runFns []runAction) func() error {
 	return func() error {
 		for _, runFn := range runFns {
-			if err := demo.setup(ctx); err != nil {
+			if err := demo.setup(ctx, cmd); err != nil {
 				return err
 			}
 
-			if err := runFn(ctx); err != nil {
+			if err := runFn(ctx, cmd); err != nil {
 				return err
 			}
 
-			if err := demo.cleanup(ctx); err != nil {
+			if err := demo.cleanup(ctx, cmd); err != nil {
 				return err
 			}
 		}
@@ -183,7 +185,7 @@ func createRunSelected(demo *Demo, ctx *cli.Context, runFns []cli.ActionFunc) fu
 	}
 }
 
-func runContinuously(ctx *cli.Context, runSelected func() error) error {
+func runContinuously(ctx context.Context, runSelected func() error) error {
 	for {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("context cancelled: %w", err)
@@ -197,23 +199,22 @@ func runContinuously(ctx *cli.Context, runSelected func() error) error {
 
 // New creates a new Demo instance.
 func New() *Demo {
-	app := cli.NewApp()
-	app.UseShortOptionHandling = true
-	app.Flags = createFlags()
-
-	emptyFn := func(*cli.Context) error { return nil }
+	emptyFn := func(context.Context, *cli.Command) error { return nil }
 	demo := &Demo{
-		App:     app,
+		Command: ccli.NewCommand(),
 		runs:    nil,
 		setup:   emptyFn,
 		cleanup: emptyFn,
 	}
 
-	app.Action = func(ctx *cli.Context) error {
-		runFns := collectRunFunctions(ctx, demo.runs)
-		runSelected := createRunSelected(demo, ctx, runFns)
+	demo.Flags = createFlags()
+	demo.UseShortOptionHandling = true
 
-		if ctx.Bool(FlagContinuously) {
+	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
+		runFns := collectRunFunctions(cmd, demo.runs)
+		runSelected := createRunSelected(demo, ctx, cmd, runFns)
+
+		if cmd.Bool(FlagContinuously) {
 			return runContinuously(ctx, runSelected)
 		}
 
@@ -223,59 +224,73 @@ func New() *Demo {
 	return demo
 }
 
-// Setup sets the cleanup function called before each run.
-func (d *Demo) Setup(setupFn func(*cli.Context) error) {
+// Setup sets the setup function called before each run.
+func (d *Demo) Setup(setupFn func(context.Context, *cli.Command) error) {
 	d.setup = setupFn
 }
 
 // Cleanup sets the cleanup function called after each run.
-func (d *Demo) Cleanup(cleanupFn func(*cli.Context) error) {
+func (d *Demo) Cleanup(cleanupFn func(context.Context, *cli.Command) error) {
 	d.cleanup = cleanupFn
 }
 
 func (d *Demo) Add(run *Run, name, description string) {
 	flag := &cli.BoolFlag{
-		Name:    strconv.Itoa(len(d.runs)),
-		Aliases: []string{name},
-		Usage:   description,
+		Name:  name,
+		Usage: description,
 	}
+
 	d.Flags = append(d.Flags, flag)
 	d.runs = append(d.runs, &runFlag{run, flag})
 }
 
-// Run starts the demo.
+const cleanupTimeout = 10 * time.Second
+
+// Run starts the demo and exits the process on error.
 func (d *Demo) Run() {
-	// Create context that cancels on interrupt signal
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	if err := d.RunE(); err != nil {
+		log.Printf("run failed: %v", err)
+		os.Exit(1)
+	}
+}
 
-	done := make(chan bool, 1)
+// RunE starts the demo and returns any error instead of exiting.
+func (d *Demo) RunE() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// Handle interrupt signal for cleanup
+	interrupted := make(chan os.Signal, 1)
+
+	signal.Notify(interrupted, os.Interrupt)
+	defer signal.Stop(interrupted)
+
+	done := make(chan struct{})
+
 	go func() {
 		select {
-		case <-ctx.Done():
-			// Only exit if context was cancelled due to interrupt signal
-			if context.Cause(ctx) != nil {
-				// Create a minimal context for cleanup on interrupt
-				cleanupCtx := cli.NewContext(d.App, nil, nil)
-				if err := d.cleanup(cleanupCtx); err != nil {
-					log.Printf("unable to cleanup: %v", err)
-				}
+		case <-interrupted:
+			cancel()
 
-				os.Exit(0)
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+			defer cleanupCancel()
+
+			if err := d.cleanup(cleanupCtx, d.Command); err != nil {
+				log.Printf("unable to cleanup: %v", err)
 			}
+
+			os.Exit(0)
 		case <-done:
 			return
 		}
 	}()
 
-	err := d.App.Run(os.Args)
+	err := d.Command.Run(ctx, os.Args)
 
 	close(done)
-	stop() // Ensure cleanup before potential os.Exit
 
 	if err != nil {
-		log.Printf("run failed: %v", err)
-		os.Exit(1)
+		return fmt.Errorf("run: %w", err)
 	}
+
+	return nil
 }
