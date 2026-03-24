@@ -12,6 +12,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+// Demo is the main type for creating command line demos. It wraps a
+// cli.Command and manages a set of runs that can be selected via flags.
 type Demo struct {
 	*cli.Command
 

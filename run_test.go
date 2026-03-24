@@ -495,6 +495,61 @@ var _ = Describe("Run", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("should succeed to run with SetEnv", func() {
+		// Given
+		sut.SetEnv("DEMO_TEST_VAR=hello123")
+		sut.Step(demo.S("Env test"), demo.S("echo $DEMO_TEST_VAR"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("hello123"))
+	})
+
+	It("should succeed to run with multiple SetEnv calls", func() {
+		// Given
+		sut.SetEnv("VAR1=first")
+		sut.SetEnv("VAR2=second")
+		sut.Step(demo.S("Multi env"), demo.S("echo $VAR1 $VAR2"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("first second"))
+	})
+
+	It("should display Chdir as a command", func() {
+		// Given
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("After chdir"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("cd /tmp"))
+	})
+
+	It("should hide Chdir display when descriptions are hidden", func() {
+		// Given
+		opts.HideDescriptions = true
+
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("After chdir"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).ToNot(ContainSubstring("cd /tmp"))
+	})
+
 	It("should properly handle empty title", func() {
 		// Given
 		emptySut := demo.NewRun("")
