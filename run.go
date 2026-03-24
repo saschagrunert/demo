@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 )
 
 var (
@@ -33,6 +34,7 @@ type Run struct {
 	steps       []step
 	out         io.Writer
 	in          *bufio.Reader
+	inFile      *os.File
 	options     Options
 	setup       func() error
 	cleanup     func() error
@@ -77,6 +79,7 @@ func NewRun(title string, description ...string) *Run {
 		steps:       nil,
 		out:         os.Stdout,
 		in:          bufio.NewReader(os.Stdin),
+		inFile:      os.Stdin,
 		options:     Options{},
 		setup:       emptyFn,
 		cleanup:     emptyFn,
@@ -141,6 +144,12 @@ func (r *Run) SetInput(input io.Reader) error {
 	}
 
 	r.in = bufio.NewReader(input)
+
+	if f, ok := input.(*os.File); ok {
+		r.inFile = f
+	} else {
+		r.inFile = nil
+	}
 
 	return nil
 }
@@ -354,17 +363,33 @@ func (s *step) print(r *Run, msg ...string) error {
 				return err
 			}
 		} else {
-			for _, c := range m {
-				//nolint:gosec // random sleep timing for visual effect, not security-sensitive
-				time.Sleep(time.Duration(rand.IntN(r.options.TypewriterSpeed)) * time.Millisecond)
-
-				if err := write(r.out, string(c)); err != nil {
-					return err
-				}
+			if err := s.typewrite(r, m); err != nil {
+				return err
 			}
 		}
 
 		if err := write(r.out, "\n"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *step) typewrite(r *Run, m string) error {
+	restore, raw := r.enterRawMode()
+	defer restore()
+
+	for _, c := range m {
+		//nolint:gosec // random sleep timing for visual effect, not security-sensitive
+		time.Sleep(time.Duration(rand.IntN(r.options.TypewriterSpeed)) * time.Millisecond)
+
+		ch := string(c)
+		if raw && c == '\n' {
+			ch = "\r\n"
+		}
+
+		if err := write(r.out, ch); err != nil {
 			return err
 		}
 	}
@@ -379,12 +404,26 @@ func (s *step) waitOrSleep(r *Run) error {
 		return nil
 	}
 
+	restore, raw := r.enterRawMode()
+
 	if err := write(r.out, "\u2026"); err != nil {
+		restore()
+
 		return err
 	}
 
-	if err := readNewline(r.in); err != nil {
+	if err := r.readInput(raw); err != nil {
+		restore()
+
 		return err
+	}
+
+	restore()
+
+	if raw {
+		// In raw mode, Enter doesn't produce a visible newline,
+		// so just clear the prompt on the current line.
+		return write(r.out, "\r\x1b[K")
 	}
 
 	return moveCursorUp(r.out)
@@ -395,19 +434,64 @@ func (s *step) wait(r *Run) error {
 		return nil
 	}
 
+	restore, raw := r.enterRawMode()
+
 	if err := write(r.out, "bp"); err != nil {
+		restore()
+
 		return err
 	}
 
-	if err := readNewline(r.in); err != nil {
+	if err := r.readInput(raw); err != nil {
+		restore()
+
 		return err
+	}
+
+	restore()
+
+	if raw {
+		return write(r.out, "\r\x1b[K")
 	}
 
 	return moveCursorUp(r.out)
 }
 
-func readNewline(r *bufio.Reader) error {
-	_, err := r.ReadBytes('\n')
+// enterRawMode puts the terminal into raw mode if stdin is a terminal.
+// It returns a restore function and whether raw mode was activated.
+func (r *Run) enterRawMode() (func(), bool) {
+	if r.inFile == nil {
+		return func() {}, false
+	}
+
+	fd := r.inFile.Fd()
+	if !isatty.IsTerminal(fd) && !isatty.IsCygwinTerminal(fd) {
+		return func() {}, false
+	}
+
+	//nolint:gosec // fd is a valid file descriptor from os.File
+	intFd := int(fd)
+
+	oldState, err := term.MakeRaw(intFd)
+	if err != nil {
+		return func() {}, false
+	}
+
+	return func() { _ = term.Restore(intFd, oldState) }, true
+}
+
+// readInput reads input, using single-byte read in raw mode or line read otherwise.
+func (r *Run) readInput(raw bool) error {
+	if raw {
+		_, err := r.in.ReadByte()
+		if err != nil {
+			return fmt.Errorf("unable to read keypress: %w", err)
+		}
+
+		return nil
+	}
+
+	_, err := r.in.ReadBytes('\n')
 	if err != nil {
 		return fmt.Errorf("unable to read newline: %w", err)
 	}

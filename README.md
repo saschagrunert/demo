@@ -12,7 +12,7 @@ Recording command line demos can be a difficult topic these days. Doing a video
 record has the drawback of lacking flexibility and reduced interactivity during
 the demo. Typing everything by our own is error prone and distracts the audience
 from the actual topic we want to show them. So we need something in between,
-which is easy to use…
+which is easy to use...
 
 This framework should solve the issue by provided interactive demos from your
 command line!
@@ -42,35 +42,28 @@ NAME:
    main - A new cli application
 
 USAGE:
-   main [global options] command [command options] [arguments...]
-
-VERSION:
-   0.0.0
-
-COMMANDS:
-   help, h  Shows a list of commands or help for one command
+   main [global options]
 
 GLOBAL OPTIONS:
-   --all, -l                     run all demos (default: false)
-   --auto, -a                    run the demo in automatic mode, where every step gets executed automatically (default: false)
-   --dry-run                     run the demo and only prints the commands (default: false)
-   --no-color                    run the demo and output to be without colors (default: false)
+   --all, -l                     run all demos
+   --auto, -a                    run the demo in automatic mode, where every step gets executed automatically
+   --dry-run                     run the demo and only prints the commands
+   --no-color                    run the demo and output to be without colors
    --auto-timeout auto, -t auto  the timeout to be waited when auto is enabled (default: 1s)
-   --with-breakpoints            breakpoint (default: false)
-   --continue-on-error           continue if there a step fails (default: false)
-   --continuously, -c            run the demos continuously without any end (default: false)
-   --hide-descriptions, -d       hide descriptions between the steps (default: false)
-   --immediate, -i               immediately output without the typewriter animation (default: false)
-   --skip-steps value, -s value  skip the amount of initial steps within the demo (default: 0)
-   --shell value                 define the shell that is used to execute the command(s) (default: bash)
-   --typewriter-speed value      maximum milliseconds per character for typewriter animation (default: 40)
-   --help, -h                    show help (default: false)
-   --version, -v                 print the version (default: false)
+   --with-breakpoints            breakpoint
+   --continue-on-error           continue if there a step fails
+   --continuously, -c            run the demos continuously without any end
+   --hide-descriptions, -d       hide descriptions between the steps
+   --immediate, -i               immediately output without the typewriter animation
+   --skip-steps int, -s int      skip the amount of initial steps within the demo (default: 0)
+   --shell string                define the shell that is used to execute the command(s) (default: bash)
+   --typewriter-speed int        maximum milliseconds per character for typewriter animation (default: 40)
+   --help, -h                    show help
 ```
 
 The application is based on the [urfave/cli](https://github.com/urfave/cli)
-framework, which means that we have every possibility to change the app before
-actually running it.
+framework, which means that we have every possibility to change the command
+before actually running it.
 
 ```go
 // Create a new demo CLI application
@@ -80,7 +73,6 @@ d := demo.New()
 // that we can set its properties as expected:
 d.Name = "A demo of something"
 d.Usage = "Learn how this framework is being used"
-d.HideVersion = true
 ```
 
 ## Creating runs inside demos
@@ -157,20 +149,29 @@ func main() {
 }
 
 // setup will run before every demo
-func setup(ctx *cli.Context) error {
-	// Ensure can be used for easy sequential command execution
-	return Ensure(
-		"echo 'Doing first setup…'",
-		"echo 'Doing second setup…'",
-		"echo 'Doing third setup…'",
+func setup(ctx context.Context, _ *cli.Command) error {
+	// EnsureWithContext can be used for easy sequential command execution
+	return EnsureWithContext(ctx,
+		"echo 'Doing first setup...'",
+		"echo 'Doing second setup...'",
+		"echo 'Doing third setup...'",
 	)
 }
 
-// setup will run after every demo
-func cleanup(ctx *cli.Context) error {
-	return Ensure("echo 'Doing cleanup…'")
+// cleanup will run after every demo
+func cleanup(ctx context.Context, _ *cli.Command) error {
+	return EnsureWithContext(ctx, "echo 'Doing cleanup...'")
 }
 ```
+
+## Terminal raw mode
+
+During the typewriter animation and while waiting for user input, the terminal
+is put into raw mode. This suppresses any visible output from keypresses (such
+as newlines from pressing Enter) during the animation. When the animation
+completes, the terminal is restored to its previous state. This only applies
+when stdin is an interactive terminal; non-terminal input (e.g., in tests) is
+unaffected.
 
 # Contributing
 
