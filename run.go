@@ -12,12 +12,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gookit/color"
-	"github.com/urfave/cli/v2"
+	"github.com/fatih/color"
+	"github.com/mattn/go-isatty"
+	"github.com/urfave/cli/v3"
 )
 
-// errOutputNil is the error returned if no output has been set.
-var errOutputNil = errors.New("provided output is nil")
+var (
+	// errOutputNil is the error returned if no output has been set.
+	errOutputNil = errors.New("provided output is nil")
+
+	// errInputNil is the error returned if no input has been set.
+	errInputNil = errors.New("provided input is nil")
+)
 
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
@@ -26,21 +32,22 @@ type Run struct {
 	description []string
 	steps       []step
 	out         io.Writer
+	in          *bufio.Reader
 	options     Options
 	setup       func() error
 	cleanup     func() error
 }
 
 type step struct {
-	r                     *Run
 	text, command         []string
 	canFail, isBreakPoint bool
 }
 
 // Options specify the run options.
 type Options struct {
-	//nolint:containedctx // this is intentional
-	context context.Context
+	// Context is stored to pass through to exec.CommandContext for step execution.
+	//nolint:containedctx // required to thread context through to subprocesses
+	Context context.Context
 
 	AutoTimeout      time.Duration
 	Auto             bool
@@ -55,9 +62,9 @@ type Options struct {
 	TypewriterSpeed  int
 
 	// Cached color functions to avoid repeated conditionals
-	cyanPrintf  func(format string, a ...interface{}) string
-	whitePrintf func(format string, a ...interface{}) string
-	greenPrintf func(format string, a ...interface{}) string
+	cyanSprintf  func(format string, a ...interface{}) string
+	whiteSprintf func(format string, a ...interface{}) string
+	greenSprintf func(format string, a ...interface{}) string
 }
 
 func emptyFn() error { return nil }
@@ -69,42 +76,46 @@ func NewRun(title string, description ...string) *Run {
 		description: description,
 		steps:       nil,
 		out:         os.Stdout,
+		in:          bufio.NewReader(os.Stdin),
 		options:     Options{},
 		setup:       emptyFn,
 		cleanup:     emptyFn,
 	}
 }
 
-// optionsFrom creates a new set of options from the provided context.
-func optionsFrom(ctx *cli.Context) Options {
-	noColor := ctx.Bool(FlagNoColor)
+// optionsFrom creates a new set of options from the provided command.
+func optionsFrom(ctx context.Context, cmd *cli.Command) Options {
+	noColor := cmd.Bool(FlagNoColor)
 	opts := Options{
-		context:          ctx.Context,
-		AutoTimeout:      ctx.Duration(FlagAutoTimeout),
-		Auto:             ctx.Bool(FlagAuto),
-		BreakPoint:       ctx.Bool(FlagBreakPoint),
-		ContinueOnError:  ctx.Bool(FlagContinueOnError),
-		HideDescriptions: ctx.Bool(FlagHideDescriptions),
-		DryRun:           ctx.Bool(FlagDryRun),
+		Context:          ctx,
+		AutoTimeout:      cmd.Duration(FlagAutoTimeout),
+		Auto:             cmd.Bool(FlagAuto),
+		BreakPoint:       cmd.Bool(FlagBreakPoint),
+		ContinueOnError:  cmd.Bool(FlagContinueOnError),
+		HideDescriptions: cmd.Bool(FlagHideDescriptions),
+		DryRun:           cmd.Bool(FlagDryRun),
 		NoColor:          noColor,
-		Immediate:        ctx.Bool(FlagImmediate),
-		SkipSteps:        ctx.Int(FlagSkipSteps),
-		Shell:            ctx.String(FlagShell),
-		TypewriterSpeed:  ctx.Int(FlagTypewriterSpeed),
+		Immediate:        cmd.Bool(FlagImmediate),
+		SkipSteps:        cmd.Int(FlagSkipSteps),
+		Shell:            cmd.String(FlagShell),
+		TypewriterSpeed:  cmd.Int(FlagTypewriterSpeed),
 	}
 
-	// Cache color functions based on NoColor setting
-	if noColor {
-		opts.cyanPrintf = fmt.Sprintf
-		opts.whitePrintf = fmt.Sprintf
-		opts.greenPrintf = fmt.Sprintf
-	} else {
-		opts.cyanPrintf = color.Cyan.Sprintf
-		opts.whitePrintf = color.White.Darken().Sprintf
-		opts.greenPrintf = color.Green.Sprintf
-	}
+	initColorFunctions(&opts)
 
 	return opts
+}
+
+func initColorFunctions(opts *Options) {
+	if opts.NoColor {
+		opts.cyanSprintf = fmt.Sprintf
+		opts.whiteSprintf = fmt.Sprintf
+		opts.greenSprintf = fmt.Sprintf
+	} else {
+		opts.cyanSprintf = color.CyanString
+		opts.whiteSprintf = color.New(color.FgWhite, color.Faint).SprintfFunc()
+		opts.greenSprintf = color.GreenString
+	}
 }
 
 // S is a short-hand for converting string slice syntaxes.
@@ -123,7 +134,18 @@ func (r *Run) SetOutput(output io.Writer) error {
 	return nil
 }
 
-// Setup sets the cleanup function called before this run.
+// SetInput can be used to replace the default input (os.Stdin) for the Run.
+func (r *Run) SetInput(input io.Reader) error {
+	if input == nil {
+		return errInputNil
+	}
+
+	r.in = bufio.NewReader(input)
+
+	return nil
+}
+
+// Setup sets the setup function called before this run.
 func (r *Run) Setup(setupFn func() error) {
 	r.setup = setupFn
 }
@@ -135,30 +157,30 @@ func (r *Run) Cleanup(cleanupFn func() error) {
 
 // Step creates a new step on the provided run.
 func (r *Run) Step(text, command []string) {
-	r.steps = append(r.steps, step{r, text, command, false, false})
+	r.steps = append(r.steps, step{text, command, false, false})
 }
 
 // StepCanFail creates a new step which can fail on execution.
 func (r *Run) StepCanFail(text, command []string) {
-	r.steps = append(r.steps, step{r, text, command, true, false})
+	r.steps = append(r.steps, step{text, command, true, false})
 }
 
 // BreakPoint creates a new step which can fail on execution.
 func (r *Run) BreakPoint() {
-	r.steps = append(r.steps, step{r, nil, nil, true, true})
+	r.steps = append(r.steps, step{nil, nil, true, true})
 }
 
 // Run executes the run in the provided CLI context.
-func (r *Run) Run(ctx *cli.Context) error {
-	opts := optionsFrom(ctx)
+func (r *Run) Run(ctx context.Context, cmd *cli.Command) error {
+	opts := optionsFrom(ctx, cmd)
 
 	return r.RunWithOptions(&opts)
 }
 
 // RunWithOptions executes the run with the provided Options.
 func (r *Run) RunWithOptions(opts *Options) error {
-	if opts.context == nil {
-		opts.context = context.Background()
+	if opts.Context == nil {
+		opts.Context = context.Background()
 	}
 
 	if opts.Shell == "" {
@@ -169,17 +191,8 @@ func (r *Run) RunWithOptions(opts *Options) error {
 		opts.TypewriterSpeed = DefaultTypewriterSpeed
 	}
 
-	// Initialize color functions if not set
-	if opts.cyanPrintf == nil {
-		if opts.NoColor {
-			opts.cyanPrintf = fmt.Sprintf
-			opts.whitePrintf = fmt.Sprintf
-			opts.greenPrintf = fmt.Sprintf
-		} else {
-			opts.cyanPrintf = color.Cyan.Sprintf
-			opts.whitePrintf = color.White.Darken().Sprintf
-			opts.greenPrintf = color.Green.Sprintf
-		}
+	if opts.cyanSprintf == nil {
+		initColorFunctions(opts)
 	}
 
 	if err := r.setup(); err != nil {
@@ -192,16 +205,16 @@ func (r *Run) RunWithOptions(opts *Options) error {
 		return err
 	}
 
-	for i, step := range r.steps {
+	for i, s := range r.steps {
 		if r.options.SkipSteps > i {
 			continue
 		}
 
 		if r.options.ContinueOnError {
-			step.canFail = true
+			s.canFail = true
 		}
 
-		if err := step.run(opts.context, i+1, len(r.steps)); err != nil {
+		if err := s.run(r, i+1, len(r.steps)); err != nil {
 			return err
 		}
 	}
@@ -210,12 +223,12 @@ func (r *Run) RunWithOptions(opts *Options) error {
 }
 
 func (r *Run) printTitleAndDescription() error {
-	if err := write(r.out, r.options.cyanPrintf("%s\n", r.title)); err != nil {
+	if err := write(r.out, r.options.cyanSprintf("%s\n", r.title)); err != nil {
 		return err
 	}
 
 	for range r.title {
-		if err := write(r.out, r.options.cyanPrintf("=")); err != nil {
+		if err := write(r.out, r.options.cyanSprintf("=")); err != nil {
 			return err
 		}
 	}
@@ -227,7 +240,7 @@ func (r *Run) printTitleAndDescription() error {
 	if !r.options.HideDescriptions {
 		for _, d := range r.description {
 			if err := write(
-				r.out, r.options.whitePrintf("%s\n", d),
+				r.out, r.options.whiteSprintf("%s\n", d),
 			); err != nil {
 				return err
 			}
@@ -250,68 +263,70 @@ func write(w io.Writer, str string) error {
 	return nil
 }
 
-func (s *step) run(ctx context.Context, current, maximum int) error {
-	if err := s.waitOrSleep(); err != nil {
+func (s *step) run(r *Run, current, maximum int) error {
+	if err := s.waitOrSleep(r); err != nil {
 		return fmt.Errorf("unable to run step: %w", err)
 	}
 
-	if len(s.text) > 0 && !s.r.options.HideDescriptions {
-		s.echo(current, maximum)
+	if len(s.text) > 0 && !r.options.HideDescriptions {
+		if err := s.echo(r, current, maximum); err != nil {
+			return err
+		}
 	}
 
 	if s.isBreakPoint {
-		return s.wait()
+		return s.wait(r)
 	}
 
 	if len(s.command) > 0 {
-		return s.execute(ctx)
+		return s.execute(r)
 	}
 
 	return nil
 }
 
-func (s *step) echo(current, maximum int) {
+func (s *step) echo(r *Run, current, maximum int) error {
 	prepared := make([]string, len(s.text))
 
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
 			colon := ":"
 			if s.command == nil {
-				// Do not set the expectation that there is more if no command
-				// provided.
 				colon = ""
 			}
 
-			prepared[i] = s.r.options.whitePrintf(
+			prepared[i] = r.options.whiteSprintf(
 				"# %s [%d/%d]%s\n",
 				x, current, maximum, colon,
 			)
 		} else {
-			prepared[i] = s.r.options.whitePrintf("# %s", x)
+			prepared[i] = r.options.whiteSprintf("# %s", x)
 		}
 	}
 
-	s.print(prepared...)
+	return s.print(r, prepared...)
 }
 
-func (s *step) execute(ctx context.Context) error {
+func (s *step) execute(r *Run) error {
 	joinedCommand := strings.Join(s.command, " ")
 	//nolint:gosec // we purposefully run user-provided code
-	cmd := exec.CommandContext(ctx, s.r.options.Shell, "-c", joinedCommand)
+	cmd := exec.CommandContext(r.options.Context, r.options.Shell, "-c", joinedCommand)
 
-	cmd.Stderr = s.r.out
-	cmd.Stdout = s.r.out
+	cmd.Stderr = r.out
+	cmd.Stdout = r.out
 
-	// Format command display with line continuations
 	displayCommand := strings.Join(s.command, " \\\n    ")
-	cmdString := s.r.options.greenPrintf("> %s", displayCommand)
-	s.print(cmdString)
+	cmdString := r.options.greenSprintf("> %s", displayCommand)
 
-	if err := s.waitOrSleep(); err != nil {
+	if err := s.print(r, cmdString); err != nil {
+		return err
+	}
+
+	if err := s.waitOrSleep(r); err != nil {
 		return fmt.Errorf("unable to execute step: %w", err)
 	}
 
-	if s.r.options.DryRun {
+	if r.options.DryRun {
 		return nil
 	}
 
@@ -321,7 +336,9 @@ func (s *step) execute(ctx context.Context) error {
 		return nil
 	}
 
-	s.print("")
+	if err := s.print(r, ""); err != nil {
+		return err
+	}
 
 	if err != nil {
 		return fmt.Errorf("step command failed: %w", err)
@@ -330,47 +347,24 @@ func (s *step) execute(ctx context.Context) error {
 	return nil
 }
 
-func (s *step) print(msg ...string) error {
+func (s *step) print(r *Run, msg ...string) error {
 	for _, m := range msg {
-		var buf strings.Builder
-		// Pre-allocate for UTF-8: len(m) gives byte count which is the actual size needed
-		buf.Grow(len(m))
-
-		for _, c := range m {
-			if !s.r.options.Immediate {
-				//nolint:gosec // random sleep timing for visual effect, not security-sensitive
-				time.Sleep(time.Duration(rand.IntN(s.r.options.TypewriterSpeed)) * time.Millisecond)
+		if r.options.Immediate {
+			if err := write(r.out, m); err != nil {
+				return err
 			}
+		} else {
+			for _, c := range m {
+				//nolint:gosec // random sleep timing for visual effect, not security-sensitive
+				time.Sleep(time.Duration(rand.IntN(r.options.TypewriterSpeed)) * time.Millisecond)
 
-			buf.WriteRune(c)
+				if err := write(r.out, string(c)); err != nil {
+					return err
+				}
+			}
 		}
 
-		if err := write(s.r.out, buf.String()); err != nil {
-			return err
-		}
-
-		if err := write(s.r.out, "\n"); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *step) waitOrSleep() error {
-	if s.r.options.Auto {
-		time.Sleep(s.r.options.AutoTimeout)
-	} else {
-		if err := write(s.r.out, "…"); err != nil {
-			return err
-		}
-
-		_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
-		if err != nil {
-			return fmt.Errorf("unable to read newline: %w", err)
-		}
-		// Move cursor up again
-		if err := write(s.r.out, "\x1b[1A"); err != nil {
+		if err := write(r.out, "\n"); err != nil {
 			return err
 		}
 	}
@@ -378,23 +372,61 @@ func (s *step) waitOrSleep() error {
 	return nil
 }
 
-func (s *step) wait() error {
-	if !s.r.options.BreakPoint {
+func (s *step) waitOrSleep(r *Run) error {
+	if r.options.Auto {
+		time.Sleep(r.options.AutoTimeout)
+
 		return nil
 	}
 
-	if err := write(s.r.out, "bp"); err != nil {
+	if err := write(r.out, "\u2026"); err != nil {
 		return err
 	}
 
-	_, err := bufio.NewReader(os.Stdin).ReadBytes('\n')
+	if err := readNewline(r.in); err != nil {
+		return err
+	}
+
+	return moveCursorUp(r.out)
+}
+
+func (s *step) wait(r *Run) error {
+	if !r.options.BreakPoint {
+		return nil
+	}
+
+	if err := write(r.out, "bp"); err != nil {
+		return err
+	}
+
+	if err := readNewline(r.in); err != nil {
+		return err
+	}
+
+	return moveCursorUp(r.out)
+}
+
+func readNewline(r *bufio.Reader) error {
+	_, err := r.ReadBytes('\n')
 	if err != nil {
 		return fmt.Errorf("unable to read newline: %w", err)
 	}
-	// Move cursor up again
-	if err := write(s.r.out, "\x1b[1A"); err != nil {
-		return err
-	}
 
 	return nil
+}
+
+func moveCursorUp(w io.Writer) error {
+	if !isTerminal(w) {
+		return nil
+	}
+
+	return write(w, "\x1b[1A")
+}
+
+func isTerminal(w io.Writer) bool {
+	if f, ok := w.(*os.File); ok {
+		return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
+	}
+
+	return false
 }

@@ -2,13 +2,11 @@ package demo_test
 
 import (
 	"errors"
-	"flag"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/saschagrunert/demo"
-	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -98,17 +96,55 @@ var _ = t.Describe("Run", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should succeed to run from a cli context", func() {
+	It("should fail to set nil input", func() {
 		// Given
-		app := cli.NewApp()
-		flagSet := &flag.FlagSet{}
-		flagSet.Bool(demo.FlagAuto, true, "")
-		flagSet.Bool(demo.FlagImmediate, true, "")
+		// When
+		err := sut.SetInput(nil)
 
-		ctx := cli.NewContext(app, flagSet, nil)
+		// Then
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should succeed to set input", func() {
+		// Given
+		input := strings.NewReader("\n")
 
 		// When
-		err := sut.Run(ctx)
+		err := sut.SetInput(input)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("should succeed to run in non-auto mode with input", func() {
+		// Given
+		// Each step calls waitOrSleep twice (before text, before execute),
+		// so we need enough newlines for: 1 initial waitOrSleep + 1 echo + 1 execute waitOrSleep
+		input := strings.NewReader("\n\n\n")
+		err := sut.SetInput(input)
+		Expect(err).ToNot(HaveOccurred())
+
+		sut.Step(demo.S("Interactive step"), demo.S("echo hello"))
+
+		manualOpts := demo.Options{
+			Auto:      false,
+			Immediate: true,
+		}
+
+		// When
+		err = sut.RunWithOptions(&manualOpts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("echo hello"))
+	})
+
+	It("should succeed to run from a cli command", func() {
+		// Given
+		opts := demo.Options{Auto: true, Immediate: true}
+
+		// When
+		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
@@ -155,6 +191,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run with hidden descriptions", func() {
 		// Given
 		opts.HideDescriptions = true
+
 		sut.Step(demo.S("Hidden description"), demo.S("echo test"))
 
 		// When
@@ -168,6 +205,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run with dry-run", func() {
 		// Given
 		opts.DryRun = true
+
 		sut.Step(demo.S("Test step"), demo.S("echo should not run"))
 
 		// When
@@ -181,6 +219,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run with no-color", func() {
 		// Given
 		opts.NoColor = true
+
 		sut.Step(demo.S("Test step"), demo.S("echo test"))
 
 		// When
@@ -193,6 +232,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run with skip steps", func() {
 		// Given
 		opts.SkipSteps = 1
+
 		sut.Step(demo.S("Skipped step"), demo.S("echo skipped"))
 		sut.Step(demo.S("Executed step"), demo.S("echo executed"))
 
@@ -208,6 +248,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run with continue on error", func() {
 		// Given
 		opts.ContinueOnError = true
+
 		sut.Step(demo.S("Failing step"), demo.S("exit 1"))
 		sut.Step(demo.S("Should still run"), demo.S("echo after error"))
 
@@ -222,6 +263,7 @@ var _ = t.Describe("Run", func() {
 	It("should succeed to run with custom shell", func() {
 		// Given
 		opts.Shell = "sh"
+
 		sut.Step(demo.S("Shell test"), demo.S("echo test"))
 
 		// When
@@ -237,6 +279,7 @@ var _ = t.Describe("Run", func() {
 		opts.Immediate = false
 		opts.Auto = true
 		opts.AutoTimeout = 0
+
 		sut.Step(demo.S("Speed test"), demo.S("echo test"))
 
 		// When
@@ -339,25 +382,24 @@ var _ = t.Describe("Run", func() {
 		Expect(out.String()).To(ContainSubstring("echo line2"))
 	})
 
-	It("should run with all flags from context", func() {
+	It("should run with all flags from options", func() {
 		// Given
-		app := cli.NewApp()
-		flagSet := &flag.FlagSet{}
-		flagSet.Bool(demo.FlagAuto, true, "")
-		flagSet.Bool(demo.FlagImmediate, true, "")
-		flagSet.Bool(demo.FlagHideDescriptions, true, "")
-		flagSet.Bool(demo.FlagDryRun, true, "")
-		flagSet.Bool(demo.FlagNoColor, true, "")
-		flagSet.Bool(demo.FlagContinueOnError, true, "")
-		flagSet.Int(demo.FlagSkipSteps, 0, "")
-		flagSet.String(demo.FlagShell, "sh", "")
-		flagSet.Int(demo.FlagTypewriterSpeed, 20, "")
+		opts := demo.Options{
+			Auto:             true,
+			Immediate:        true,
+			HideDescriptions: true,
+			DryRun:           true,
+			NoColor:          true,
+			ContinueOnError:  true,
+			SkipSteps:        0,
+			Shell:            "sh",
+			TypewriterSpeed:  20,
+		}
 
-		ctx := cli.NewContext(app, flagSet, nil)
 		sut.Step(demo.S("Test all flags"), demo.S("echo test"))
 
 		// When
-		err := sut.Run(ctx)
+		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
@@ -365,17 +407,16 @@ var _ = t.Describe("Run", func() {
 
 	It("should run with breakpoint flag set but BreakPoint not called", func() {
 		// Given
-		app := cli.NewApp()
-		flagSet := &flag.FlagSet{}
-		flagSet.Bool(demo.FlagAuto, true, "")
-		flagSet.Bool(demo.FlagImmediate, true, "")
-		flagSet.Bool(demo.FlagBreakPoint, true, "")
+		opts := demo.Options{
+			Auto:       true,
+			Immediate:  true,
+			BreakPoint: true,
+		}
 
-		ctx := cli.NewContext(app, flagSet, nil)
 		sut.Step(demo.S("Test"), demo.S("echo test"))
 
 		// When
-		err := sut.Run(ctx)
+		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())

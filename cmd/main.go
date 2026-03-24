@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
+
 	. "github.com/saschagrunert/demo" //nolint:stylecheck // dot imports are intended here
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func main() {
@@ -28,18 +30,18 @@ func main() {
 }
 
 // setup will run before every demo.
-func setup(*cli.Context) error {
-	// Ensure can be used for easy sequential command execution
-	return Ensure(
+func setup(ctx context.Context, _ *cli.Command) error {
+	// EnsureWithContext can be used for easy sequential command execution
+	return EnsureWithContext(ctx,
 		"echo 'Doing first setup…'",
 		"echo 'Doing second setup…'",
 		"echo 'Doing third setup…'",
 	)
 }
 
-// setup will run after every demo.
-func cleanup(*cli.Context) error {
-	return Ensure("echo 'Doing cleanup…'")
+// cleanup will run after every demo.
+func cleanup(ctx context.Context, _ *cli.Command) error {
+	return EnsureWithContext(ctx, "echo 'Doing cleanup…'")
 }
 
 // example is the single demo run for this application.
