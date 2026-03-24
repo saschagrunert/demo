@@ -422,6 +422,79 @@ var _ = Describe("Run", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("should succeed to run with SetWorkDir", func() {
+		// Given
+		sut.SetWorkDir("/tmp")
+		sut.Step(demo.S("Working dir test"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("/tmp"))
+	})
+
+	It("should succeed to run with Chdir between steps", func() {
+		// Given
+		sut.Step(demo.S("First step"), demo.S("pwd"))
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("After chdir"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("/tmp"))
+	})
+
+	It("should apply Chdir even when steps are skipped", func() {
+		// Given
+		opts.SkipSteps = 1
+
+		sut.Step(demo.S("Skipped step"), demo.S("echo skipped"))
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("After chdir"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).ToNot(ContainSubstring("Skipped step"))
+		Expect(out.String()).To(ContainSubstring("/tmp"))
+	})
+
+	It("should not count Chdir in step numbering", func() {
+		// Given
+		sut.Step(demo.S("First"), demo.S("echo one"))
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("Second"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("[1/2]"))
+		Expect(out.String()).To(ContainSubstring("[2/2]"))
+	})
+
+	It("should succeed to run with Chdir and dry-run", func() {
+		// Given
+		opts.DryRun = true
+
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("Dry run chdir"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+	})
+
 	It("should properly handle empty title", func() {
 		// Given
 		emptySut := demo.NewRun("")
