@@ -164,6 +164,33 @@ func cleanup(ctx context.Context, _ *cli.Command) error {
 }
 ```
 
+## Working directory
+
+The working directory for command execution can be configured per run or changed
+between steps:
+
+```go
+func example() *Run {
+	r := NewRun("Working Directory Demo")
+
+	// Set the initial working directory for all steps
+	r.SetWorkDir("/tmp")
+
+	r.Step(S("Show current directory"), S("pwd"))
+
+	// Change the working directory between steps
+	r.Chdir("/home")
+
+	r.Step(S("Now in a different directory"), S("pwd"))
+
+	return r
+}
+```
+
+`SetWorkDir` sets the initial working directory for the run. `Chdir` inserts a
+step that changes the working directory for all subsequent steps. If no working
+directory is set, commands run in the current process directory.
+
 ## Terminal raw mode
 
 During the typewriter animation and while waiting for user input, the terminal

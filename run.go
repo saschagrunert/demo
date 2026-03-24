@@ -38,11 +38,13 @@ type Run struct {
 	options     Options
 	setup       func() error
 	cleanup     func() error
+	dir         string
 }
 
 type step struct {
 	text, command         []string
 	canFail, isBreakPoint bool
+	dir                   string
 }
 
 // Options specify the run options.
@@ -164,19 +166,29 @@ func (r *Run) Cleanup(cleanupFn func() error) {
 	r.cleanup = cleanupFn
 }
 
+// SetWorkDir sets the working directory for all steps in this run.
+func (r *Run) SetWorkDir(dir string) {
+	r.dir = dir
+}
+
 // Step creates a new step on the provided run.
 func (r *Run) Step(text, command []string) {
-	r.steps = append(r.steps, step{text, command, false, false})
+	r.steps = append(r.steps, step{text: text, command: command})
 }
 
 // StepCanFail creates a new step which can fail on execution.
 func (r *Run) StepCanFail(text, command []string) {
-	r.steps = append(r.steps, step{text, command, true, false})
+	r.steps = append(r.steps, step{text: text, command: command, canFail: true})
+}
+
+// Chdir creates a step that changes the working directory for subsequent steps.
+func (r *Run) Chdir(dir string) {
+	r.steps = append(r.steps, step{dir: dir})
 }
 
 // BreakPoint creates a new step which can fail on execution.
 func (r *Run) BreakPoint() {
-	r.steps = append(r.steps, step{nil, nil, true, true})
+	r.steps = append(r.steps, step{canFail: true, isBreakPoint: true})
 }
 
 // Run executes the run in the provided CLI context.
@@ -214,8 +226,20 @@ func (r *Run) RunWithOptions(opts *Options) error {
 		return err
 	}
 
-	for i, s := range r.steps {
-		if r.options.SkipSteps > i {
+	visibleSteps := r.countVisibleSteps()
+	current := 0
+
+	for _, s := range r.steps {
+		// Always apply Chdir steps, even when skipped
+		if s.dir != "" {
+			r.dir = s.dir
+
+			continue
+		}
+
+		current++
+
+		if r.options.SkipSteps >= current {
 			continue
 		}
 
@@ -223,7 +247,7 @@ func (r *Run) RunWithOptions(opts *Options) error {
 			s.canFail = true
 		}
 
-		if err := s.run(r, i+1, len(r.steps)); err != nil {
+		if err := s.run(r, current, visibleSteps); err != nil {
 			return err
 		}
 	}
@@ -270,6 +294,18 @@ func write(w io.Writer, str string) error {
 	}
 
 	return nil
+}
+
+func (r *Run) countVisibleSteps() int {
+	count := 0
+
+	for _, s := range r.steps {
+		if s.dir == "" {
+			count++
+		}
+	}
+
+	return count
 }
 
 func (s *step) run(r *Run, current, maximum int) error {
@@ -323,6 +359,7 @@ func (s *step) execute(r *Run) error {
 
 	cmd.Stderr = r.out
 	cmd.Stdout = r.out
+	cmd.Dir = r.dir
 
 	displayCommand := strings.Join(s.command, " \\\n    ")
 	cmdString := r.options.greenSprintf("> %s", displayCommand)
