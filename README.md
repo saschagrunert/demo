@@ -188,8 +188,28 @@ func example() *Run {
 ```
 
 `SetWorkDir` sets the initial working directory for the run. `Chdir` inserts a
-step that changes the working directory for all subsequent steps. If no working
-directory is set, commands run in the current process directory.
+step that changes the working directory for all subsequent steps and displays
+`> cd <dir>` in the output. If no working directory is set, commands run in
+the current process directory.
+
+## Environment variables
+
+Custom environment variables can be set for all steps in a run:
+
+```go
+func example() *Run {
+	r := NewRun("Environment Demo")
+
+	r.SetEnv("MY_VAR=hello", "OTHER_VAR=world")
+
+	r.Step(S("Show env"), S("echo $MY_VAR $OTHER_VAR"))
+
+	return r
+}
+```
+
+Variables are appended to the current process environment. Multiple calls to
+`SetEnv` accumulate variables.
 
 ## Terminal raw mode
 

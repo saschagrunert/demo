@@ -39,6 +39,7 @@ type Run struct {
 	setup       func() error
 	cleanup     func() error
 	dir         string
+	env         []string
 }
 
 type step struct {
@@ -171,6 +172,13 @@ func (r *Run) SetWorkDir(dir string) {
 	r.dir = dir
 }
 
+// SetEnv sets environment variables for all steps in this run.
+// Each entry should be in the form "KEY=VALUE". These are appended
+// to the current process environment.
+func (r *Run) SetEnv(env ...string) {
+	r.env = append(r.env, env...)
+}
+
 // Step creates a new step on the provided run.
 func (r *Run) Step(text, command []string) {
 	r.steps = append(r.steps, step{text: text, command: command})
@@ -233,6 +241,13 @@ func (r *Run) RunWithOptions(opts *Options) error {
 		// Always apply Chdir steps, even when skipped
 		if s.dir != "" {
 			r.dir = s.dir
+
+			if !r.options.HideDescriptions {
+				cdStr := r.options.greenSprintf("> cd %s", s.dir)
+				if err := write(r.out, cdStr+"\n"); err != nil {
+					return err
+				}
+			}
 
 			continue
 		}
@@ -359,7 +374,12 @@ func (s *step) execute(r *Run) error {
 
 	cmd.Stderr = r.out
 	cmd.Stdout = r.out
+	cmd.Stdin = r.inFile
 	cmd.Dir = r.dir
+
+	if len(r.env) > 0 {
+		cmd.Env = append(os.Environ(), r.env...)
+	}
 
 	displayCommand := strings.Join(s.command, " \\\n    ")
 	cmdString := r.options.greenSprintf("> %s", displayCommand)
