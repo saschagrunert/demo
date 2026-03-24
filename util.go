@@ -10,7 +10,7 @@ import (
 // This utility function can be used during setup or cleanup.
 func EnsureWithContext(ctx context.Context, commands ...string) error {
 	for _, c := range commands {
-		cmd := exec.CommandContext(ctx, "sh", "-c", c)
+		cmd := exec.CommandContext(ctx, "bash", "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
 

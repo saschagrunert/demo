@@ -8,7 +8,7 @@ import (
 	"github.com/saschagrunert/demo"
 )
 
-var _ = t.Describe("Util", func() {
+var _ = Describe("Util", func() {
 	It("should succeed to Ensure", func() {
 		// Given
 		// When

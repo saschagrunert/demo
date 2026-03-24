@@ -15,7 +15,7 @@ var (
 	errWriteError    = errors.New("write error")
 )
 
-var _ = t.Describe("Run", func() {
+var _ = Describe("Run", func() {
 	var (
 		sut         *demo.Run
 		out         *strings.Builder

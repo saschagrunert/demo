@@ -234,6 +234,7 @@ func (d *Demo) Cleanup(cleanupFn func(context.Context, *cli.Command) error) {
 	d.cleanup = cleanupFn
 }
 
+// Add registers a new run with the given flag name and description.
 func (d *Demo) Add(run *Run, name, description string) {
 	flag := &cli.BoolFlag{
 		Name:  name,
@@ -264,7 +265,7 @@ func (d *Demo) RunE() error {
 	signal.Notify(interrupted, os.Interrupt)
 	defer signal.Stop(interrupted)
 
-	done := make(chan struct{})
+	errCh := make(chan error, 1)
 
 	go func() {
 		select {
@@ -274,22 +275,34 @@ func (d *Demo) RunE() error {
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
 			defer cleanupCancel()
 
+			//nolint:contextcheck // intentionally using a new context since the parent is cancelled
 			if err := d.cleanup(cleanupCtx, d.Command); err != nil {
-				log.Printf("unable to cleanup: %v", err)
+				errCh <- fmt.Errorf("cleanup on interrupt: %w", err)
+
+				return
 			}
 
-			os.Exit(0)
-		case <-done:
+			errCh <- nil
+		case <-ctx.Done():
 			return
 		}
 	}()
 
-	err := d.Command.Run(ctx, os.Args)
+	runErr := d.Command.Run(ctx, os.Args)
 
-	close(done)
+	cancel()
 
-	if err != nil {
-		return fmt.Errorf("run: %w", err)
+	// Wait for the interrupt goroutine to finish cleanup if it was triggered
+	select {
+	case cleanupErr := <-errCh:
+		if cleanupErr != nil {
+			return cleanupErr
+		}
+	default:
+	}
+
+	if runErr != nil {
+		return fmt.Errorf("run: %w", runErr)
 	}
 
 	return nil
