@@ -45,6 +45,7 @@ jobs:
           go-version-file: go.mod
       - run: make test
       - uses: codecov/codecov-action@4481f553995cc5011b158ce191746ac1a1d0f815 # v5.5.3
+        if: github.actor != 'dependabot[bot]'
         with:
           files: build/coverage/coverprofile
           token: ${{ secrets.CODECOV_TOKEN }}
