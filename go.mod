@@ -4,8 +4,8 @@ go 1.26
 
 require (
 	github.com/fatih/color v1.19.0
-	github.com/mattn/go-isatty v0.0.21
-	github.com/onsi/ginkgo/v2 v2.28.1
+	github.com/mattn/go-isatty v0.0.22
+	github.com/onsi/ginkgo/v2 v2.28.2
 	github.com/onsi/gomega v1.39.1
 	github.com/saschagrunert/ccli/v3 v3.0.0
 	github.com/urfave/cli/v3 v3.8.0
