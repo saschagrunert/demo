@@ -16,6 +16,13 @@ import (
 //nolint:gochecknoglobals // required for test synchronization
 var osArgsMu sync.Mutex
 
+const (
+	appName         = "demo"
+	autoFlag        = "--auto"
+	autoTimeoutFlag = "--auto-timeout=0"
+	immediateFlag   = "--immediate"
+)
+
 func withArgs(args []string, fn func()) {
 	osArgsMu.Lock()
 
@@ -32,7 +39,7 @@ func withArgs(args []string, fn func()) {
 
 var _ = Describe("Demo", func() {
 	It("should succeed to run", func() {
-		withArgs([]string{"demo"}, func() {
+		withArgs([]string{appName}, func() {
 			sut := demo.New()
 			Expect(sut.RunE()).To(Succeed())
 		})
@@ -40,7 +47,7 @@ var _ = Describe("Demo", func() {
 
 	It("should succeed to run with example", func() {
 		withArgs([]string{
-			"demo", "--auto", "--auto-timeout=0", "--immediate", "--title",
+			appName, autoFlag, autoTimeoutFlag, immediateFlag, "--title",
 		}, func() {
 			example := func() *demo.Run {
 				r := demo.NewRun(
@@ -86,7 +93,7 @@ var _ = Describe("Demo", func() {
 
 	It("should succeed to run with --all flag", func() {
 		withArgs([]string{
-			"demo", "--all", "--auto", "--auto-timeout=0", "--immediate",
+			appName, "--all", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			run2 := demo.NewRun("Run 2")
@@ -101,7 +108,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run selected demo by flag", func() {
 		withArgs([]string{
-			"demo", "--run2", "--auto", "--auto-timeout=0", "--immediate",
+			appName, "--run2", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			run2 := demo.NewRun("Run 2")
@@ -116,7 +123,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run selected demo by name alias", func() {
 		withArgs([]string{
-			"demo", "--run1", "--auto", "--auto-timeout=0", "--immediate",
+			appName, "--run1", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			run2 := demo.NewRun("Run 2")
@@ -131,7 +138,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run with short option handling", func() {
 		withArgs([]string{
-			"demo", "-a", "-i", "--run1",
+			appName, "-a", "-i", "--run1",
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			sut := demo.New()
@@ -143,7 +150,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run with all short flags", func() {
 		withArgs([]string{
-			"demo", "-l", "-a", "-t=0", "-i", "-d", "-s=0",
+			appName, "-l", "-a", "-t=0", "-i", "-d", "-s=0",
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			run2 := demo.NewRun("Run 2")
@@ -158,7 +165,7 @@ var _ = Describe("Demo", func() {
 
 	It("should handle multiple runs with setup and cleanup", func() {
 		withArgs([]string{
-			"demo", "--all", "--auto", "--auto-timeout=0", "--immediate",
+			appName, "--all", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			run2 := demo.NewRun("Run 2")

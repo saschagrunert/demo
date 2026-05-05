@@ -526,7 +526,6 @@ func (r *Run) enterRawMode() (func(), bool) {
 		return func() {}, false
 	}
 
-	//nolint:gosec // fd is a valid file descriptor from os.File
 	intFd := int(fd)
 
 	oldState, err := term.MakeRaw(intFd)
