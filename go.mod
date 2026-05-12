@@ -8,8 +8,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.28.3
 	github.com/onsi/gomega v1.40.0
 	github.com/saschagrunert/ccli/v3 v3.0.0
-	github.com/urfave/cli/v3 v3.8.0
-	golang.org/x/term v0.42.0
+	github.com/urfave/cli/v3 v3.9.0
+	golang.org/x/term v0.43.0
 )
 
 require (
@@ -23,7 +23,7 @@ require (
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
 )
