@@ -7,15 +7,16 @@ import (
 )
 
 // EnsureWithContext executes the provided commands in order with the given context.
+// Commands are always run via DefaultShell, regardless of the --shell flag.
 // This utility function can be used during setup or cleanup.
 func EnsureWithContext(ctx context.Context, commands ...string) error {
 	for _, c := range commands {
-		cmd := exec.CommandContext(ctx, "bash", "-c", c)
+		cmd := exec.CommandContext(ctx, DefaultShell, "-c", c)
 		cmd.Stderr = nil
 		cmd.Stdout = nil
 
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("run command: %w", err)
+			return fmt.Errorf("run command %q: %w", c, err)
 		}
 	}
 

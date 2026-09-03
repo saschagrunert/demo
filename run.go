@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
@@ -24,7 +25,12 @@ var (
 
 	// errInputNil is the error returned if no input has been set.
 	errInputNil = errors.New("provided input is nil")
+
+	// errInterrupt is returned when the user presses Ctrl-C in raw mode.
+	errInterrupt = errors.New("interrupted")
 )
+
+const ctrlC = 0x03
 
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
@@ -50,26 +56,37 @@ type step struct {
 
 // Options specify the run options.
 type Options struct {
-	// Context is stored to pass through to exec.CommandContext for step execution.
 	//nolint:containedctx // required to thread context through to subprocesses
+	// Context is passed through to exec.CommandContext for step execution.
 	Context context.Context
 
-	AutoTimeout      time.Duration
-	Auto             bool
-	BreakPoint       bool
-	ContinueOnError  bool
+	// AutoTimeout is the delay between steps when Auto is enabled (default: 1s).
+	AutoTimeout time.Duration
+	// Auto enables automatic mode where steps execute without waiting for input.
+	Auto bool
+	// BreakPoint enables pausing at breakpoint steps.
+	BreakPoint bool
+	// ContinueOnError allows steps to continue even if a command fails.
+	ContinueOnError bool
+	// HideDescriptions suppresses step description text between commands.
 	HideDescriptions bool
-	DryRun           bool
-	NoColor          bool
-	Immediate        bool
-	SkipSteps        int
-	Shell            string
-	TypewriterSpeed  int
+	// DryRun prints commands without executing them.
+	DryRun bool
+	// NoColor disables colored output.
+	NoColor bool
+	// Immediate disables the typewriter animation and prints output instantly.
+	Immediate bool
+	// SkipSteps skips the first N steps in the run. Negative values are treated as 0.
+	SkipSteps int
+	// Shell is the shell binary used to execute commands (default: "bash").
+	Shell string
+	// TypewriterSpeed is the maximum milliseconds per character for the typewriter
+	// animation. Values <= 0 are replaced with DefaultTypewriterSpeed.
+	TypewriterSpeed int
 
-	// Cached color functions to avoid repeated conditionals
-	cyanSprintf  func(format string, a ...interface{}) string
-	whiteSprintf func(format string, a ...interface{}) string
-	greenSprintf func(format string, a ...interface{}) string
+	cyanSprintf  func(format string, a ...any) string
+	whiteSprintf func(format string, a ...any) string
+	greenSprintf func(format string, a ...any) string
 }
 
 func emptyFn() error { return nil }
@@ -194,7 +211,8 @@ func (r *Run) Chdir(dir string) {
 	r.steps = append(r.steps, step{dir: dir})
 }
 
-// BreakPoint creates a new step which can fail on execution.
+// BreakPoint creates a new breakpoint step that pauses execution when
+// the --with-breakpoints flag is set.
 func (r *Run) BreakPoint() {
 	r.steps = append(r.steps, step{canFail: true, isBreakPoint: true})
 }
@@ -206,30 +224,56 @@ func (r *Run) Run(ctx context.Context, cmd *cli.Command) error {
 	return r.RunWithOptions(&opts)
 }
 
-// RunWithOptions executes the run with the provided Options.
-func (r *Run) RunWithOptions(opts *Options) error {
+func applyDefaults(opts *Options) {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
 
 	if opts.Shell == "" {
-		opts.Shell = "bash"
+		opts.Shell = DefaultShell
 	}
 
-	if opts.TypewriterSpeed == 0 {
+	if opts.SkipSteps < 0 {
+		opts.SkipSteps = 0
+	}
+
+	if opts.TypewriterSpeed <= 0 {
 		opts.TypewriterSpeed = DefaultTypewriterSpeed
 	}
 
 	if opts.cyanSprintf == nil {
 		initColorFunctions(opts)
 	}
+}
+
+// RunWithOptions executes the run with the provided Options.
+func (r *Run) RunWithOptions(opts *Options) error {
+	applyDefaults(opts)
 
 	if err := r.setup(); err != nil {
-		return err
+		return fmt.Errorf("setup: %w", err)
 	}
 
 	r.options = *opts
 
+	runErr := r.executeSteps()
+
+	// Run-level cleanup runs independently of demo-level cleanup in
+	// createRunSelected. On SIGINT the signal goroutine handles demo-level
+	// cleanup while this run-level cleanup may still be in progress.
+	if cleanupErr := r.cleanup(); cleanupErr != nil {
+		cleanupErr = fmt.Errorf("cleanup: %w", cleanupErr)
+		if runErr == nil {
+			return cleanupErr
+		}
+
+		return errors.Join(runErr, cleanupErr)
+	}
+
+	return runErr
+}
+
+func (r *Run) executeSteps() error {
 	if err := r.printTitleAndDescription(); err != nil {
 		return err
 	}
@@ -238,6 +282,10 @@ func (r *Run) RunWithOptions(opts *Options) error {
 	current := 0
 
 	for _, s := range r.steps {
+		if err := r.options.Context.Err(); err != nil {
+			return fmt.Errorf("context: %w", err)
+		}
+
 		// Always apply Chdir steps, even when skipped
 		if s.dir != "" {
 			r.dir = s.dir
@@ -267,7 +315,7 @@ func (r *Run) RunWithOptions(opts *Options) error {
 		}
 	}
 
-	return r.cleanup()
+	return nil
 }
 
 func (r *Run) printTitleAndDescription() error {
@@ -275,13 +323,8 @@ func (r *Run) printTitleAndDescription() error {
 		return err
 	}
 
-	for range r.title {
-		if err := write(r.out, r.options.cyanSprintf("=")); err != nil {
-			return err
-		}
-	}
-
-	if err := write(r.out, "\n"); err != nil {
+	separator := strings.Repeat("=", utf8.RuneCountInString(r.title))
+	if err := write(r.out, r.options.cyanSprintf("%s\n", separator)); err != nil {
 		return err
 	}
 
@@ -303,7 +346,7 @@ func (r *Run) printTitleAndDescription() error {
 }
 
 func write(w io.Writer, str string) error {
-	_, err := w.Write([]byte(str))
+	_, err := io.WriteString(w, str)
 	if err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
@@ -351,7 +394,7 @@ func (s *step) echo(r *Run, current, maximum int) error {
 	for i, x := range s.text {
 		if i == len(s.text)-1 {
 			colon := ":"
-			if s.command == nil {
+			if len(s.command) == 0 {
 				colon = ""
 			}
 
@@ -402,12 +445,12 @@ func (s *step) execute(r *Run) error {
 		return nil
 	}
 
-	if err := s.print(r, ""); err != nil {
-		return err
+	if printErr := s.print(r, ""); printErr != nil {
+		return printErr
 	}
 
 	if err != nil {
-		return fmt.Errorf("step command failed: %w", err)
+		return fmt.Errorf("step command %q failed: %w", joinedCommand, err)
 	}
 
 	return nil
@@ -456,30 +499,20 @@ func (s *step) typewrite(r *Run, m string) error {
 
 func (s *step) waitOrSleep(r *Run) error {
 	if r.options.Auto {
-		time.Sleep(r.options.AutoTimeout)
-
-		return nil
+		select {
+		case <-time.After(r.options.AutoTimeout):
+			return nil
+		case <-r.options.Context.Done():
+			return fmt.Errorf("context: %w", r.options.Context.Err())
+		}
 	}
 
-	restore, raw := r.enterRawMode()
-
-	if err := write(r.out, "\u2026"); err != nil {
-		restore()
-
+	raw, err := r.promptAndWait("\u2026")
+	if err != nil {
 		return err
 	}
-
-	if err := r.readInput(raw); err != nil {
-		restore()
-
-		return err
-	}
-
-	restore()
 
 	if raw {
-		// In raw mode, Enter doesn't produce a visible newline,
-		// so just clear the prompt on the current line.
 		return write(r.out, "\r\x1b[K")
 	}
 
@@ -491,27 +524,31 @@ func (s *step) wait(r *Run) error {
 		return nil
 	}
 
-	restore, raw := r.enterRawMode()
-
-	if err := write(r.out, "bp"); err != nil {
-		restore()
-
+	raw, err := r.promptAndWait("bp")
+	if err != nil {
 		return err
 	}
-
-	if err := r.readInput(raw); err != nil {
-		restore()
-
-		return err
-	}
-
-	restore()
 
 	if raw {
 		return write(r.out, "\r\x1b[K")
 	}
 
 	return moveCursorUp(r.out)
+}
+
+func (r *Run) promptAndWait(prompt string) (bool, error) {
+	restore, raw := r.enterRawMode()
+	defer restore()
+
+	if err := write(r.out, prompt); err != nil {
+		return raw, err
+	}
+
+	if err := r.readInput(raw); err != nil {
+		return raw, err
+	}
+
+	return raw, nil
 }
 
 // enterRawMode puts the terminal into raw mode if stdin is a terminal.
@@ -539,9 +576,13 @@ func (r *Run) enterRawMode() (func(), bool) {
 // readInput reads input, using single-byte read in raw mode or line read otherwise.
 func (r *Run) readInput(raw bool) error {
 	if raw {
-		_, err := r.in.ReadByte()
+		b, err := r.in.ReadByte()
 		if err != nil {
 			return fmt.Errorf("unable to read keypress: %w", err)
+		}
+
+		if b == ctrlC {
+			return errInterrupt
 		}
 
 		return nil

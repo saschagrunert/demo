@@ -3,7 +3,7 @@ GO := go
 BUILD_PATH := $(shell pwd)/build
 COVERAGE_PATH := $(BUILD_PATH)/coverage
 
-GOLANGCI_LINT_VERSION := v2.11.4
+GOLANGCI_LINT_VERSION := v2.13.2
 GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
 
 COLOR := \\033[36m
@@ -15,7 +15,7 @@ WIDTH := 25
 LDFLAGS ?= -s -w
 
 define go-build
-	cd `pwd` && $(GO) build -ldflags '$(LDFLAGS) $(2)' \
+	$(GO) build -ldflags '$(LDFLAGS) $(2)' \
 		-o $(BUILD_PATH)/$(shell basename $(1)) $(1)
 	@echo > /dev/null
 endef
@@ -72,7 +72,7 @@ ${GOLANGCI_LINT}:
 		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
 		VERSION=${GOLANGCI_LINT_VERSION} \
 		BINDIR=${BUILD_PATH} && \
-	curl -sfL $$URL/refs/heads/main/install.sh | sh -s $$VERSION
+	curl -sfL $$URL/refs/tags/$$VERSION/install.sh | sh -s $$VERSION
 
 .PHONY: lint
 lint: ${GOLANGCI_LINT} ## Run golangci-lint.

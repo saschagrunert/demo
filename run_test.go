@@ -1,8 +1,10 @@
 package demo_test
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -561,6 +563,94 @@ var _ = Describe("Run", func() {
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("should clamp negative SkipSteps to zero", func() {
+		sut.Step(demo.S("First"), demo.S("echo first"))
+		sut.Step(demo.S("Second"), demo.S("echo second"))
+
+		opts.SkipSteps = -5
+
+		err := sut.RunWithOptions(&opts)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("First"))
+		Expect(out.String()).To(ContainSubstring("Second"))
+	})
+
+	It("should use default TypewriterSpeed for non-positive values", func() {
+		opts.TypewriterSpeed = -10
+		opts.Immediate = false
+		opts.Auto = true
+		opts.AutoTimeout = 0
+
+		sut.Step(demo.S("Speed test"), demo.S("echo test"))
+
+		err := sut.RunWithOptions(&opts)
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("should return both errors when run and cleanup fail", func() {
+		sut.Step(demo.S("Failing step"), demo.S("exit 1"))
+		sut.Cleanup(func() error {
+			return errCleanupFailed
+		})
+
+		err := sut.RunWithOptions(&opts)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("exit"))
+		Expect(err.Error()).To(ContainSubstring("cleanup failed"))
+	})
+
+	It("should stop on context cancellation", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		cancelledOpts := opts
+		cancelledOpts.Context = ctx
+
+		sut.Step(demo.S("Should not run"), demo.S("echo unreachable"))
+
+		err := sut.RunWithOptions(&cancelledOpts)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("context"))
+	})
+
+	It("should call cleanup even when a step fails", func() {
+		cleanupCalled := false
+
+		sut.Cleanup(func() error {
+			cleanupCalled = true
+
+			return nil
+		})
+
+		sut.Step(demo.S("Failing"), demo.S("exit 1"))
+
+		err := sut.RunWithOptions(&opts)
+		Expect(err).To(HaveOccurred())
+		Expect(cleanupCalled).To(BeTrue())
+	})
+
+	It("should stop auto-mode sleep on context cancellation", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		cancelOpts := demo.Options{
+			Auto:        true,
+			AutoTimeout: 10 * time.Second,
+			Context:     ctx,
+			Immediate:   true,
+		}
+
+		sut.Step(demo.S("Slow step"), demo.S("echo test"))
+
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+		}()
+
+		err := sut.RunWithOptions(&cancelOpts)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("context"))
 	})
 })
 
