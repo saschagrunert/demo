@@ -11,6 +11,7 @@ linters:
     - bidichk
     - bodyclose
     - canonicalheader
+    - clickhouselint
     - containedctx
     - contextcheck
     - copyloopvar
@@ -47,7 +48,7 @@ linters:
     - godox
     - goheader
     - gomoddirectives
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - gosmopolitan
@@ -68,6 +69,7 @@ linters:
     - mirror
     - misspell
     - mnd
+    - modernize
     - musttag
     - nakedret
     - nestif
@@ -112,7 +114,7 @@ linters:
     - wsl_v5
     - zerologlint
     # - depguard
-    # - exhaustruct
+    # - exhaustruct_v5
     # - noinlineerr
     # - varnamelen
   settings:
@@ -152,6 +154,8 @@ formatters:
     - gofmt
     - gofumpt
     - goimports
+    - golines
+    - swaggo
   exclusions:
     generated: lax
     paths:

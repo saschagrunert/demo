@@ -1,11 +1,16 @@
+// Package demo provides a framework for performing live pre-recorded command
+// line demos in the terminal.
 package demo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"slices"
+	"syscall"
 	"time"
 
 	"github.com/saschagrunert/ccli/v3"
@@ -72,6 +77,9 @@ const (
 
 	// DefaultTypewriterSpeed is the default maximum milliseconds per character for typewriter animation.
 	DefaultTypewriterSpeed = 40
+
+	// DefaultShell is the default shell used to execute commands.
+	DefaultShell = "bash"
 )
 
 func createFlags() []cli.Flag {
@@ -132,8 +140,9 @@ func createFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:        FlagShell,
+			Value:       DefaultShell,
 			Usage:       "define the shell that is used to execute the command(s)",
-			DefaultText: "bash",
+			DefaultText: DefaultShell,
 		},
 		&cli.IntFlag{
 			Name:  FlagTypewriterSpeed,
@@ -158,28 +167,35 @@ func collectRunFunctions(cmd *cli.Command, runs []*runFlag) []runAction {
 type runAction func(context.Context, *cli.Command) error
 
 func isFlagSet(cmd *cli.Command, flag cli.Flag) bool {
-	for _, name := range flag.Names() {
-		if cmd.Bool(name) {
-			return true
-		}
-	}
-
-	return false
+	return slices.ContainsFunc(flag.Names(), func(name string) bool {
+		return cmd.Bool(name)
+	})
 }
 
-func createRunSelected(demo *Demo, ctx context.Context, cmd *cli.Command, runFns []runAction) func() error {
+func createRunSelected(
+	demo *Demo, ctx context.Context, cmd *cli.Command, runFns []runAction,
+) func() error {
 	return func() error {
 		for _, runFn := range runFns {
 			if err := demo.setup(ctx, cmd); err != nil {
-				return err
+				return fmt.Errorf("setup: %w", err)
 			}
 
-			if err := runFn(ctx, cmd); err != nil {
-				return err
+			runErr := runFn(ctx, cmd)
+
+			if ctx.Err() == nil {
+				if cleanupErr := demo.cleanup(ctx, cmd); cleanupErr != nil {
+					cleanupErr = fmt.Errorf("cleanup: %w", cleanupErr)
+					if runErr == nil {
+						return cleanupErr
+					}
+
+					return errors.Join(runErr, cleanupErr)
+				}
 			}
 
-			if err := demo.cleanup(ctx, cmd); err != nil {
-				return err
+			if runErr != nil {
+				return runErr
 			}
 		}
 
@@ -189,11 +205,16 @@ func createRunSelected(demo *Demo, ctx context.Context, cmd *cli.Command, runFns
 
 func runContinuously(ctx context.Context, runSelected func() error) error {
 	for {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("context cancelled: %w", err)
+		if ctx.Err() != nil {
+			//nolint:nilerr // context cancellation is the expected exit in continuous mode
+			return nil
 		}
 
 		if err := runSelected(); err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, errInterrupt) {
+				return nil
+			}
+
 			return err
 		}
 	}
@@ -262,16 +283,16 @@ func (d *Demo) RunE() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	interrupted := make(chan os.Signal, 1)
+	sig := make(chan os.Signal, 1)
 
-	signal.Notify(interrupted, os.Interrupt)
-	defer signal.Stop(interrupted)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sig)
 
 	errCh := make(chan error, 1)
 
 	go func() {
 		select {
-		case <-interrupted:
+		case <-sig:
 			cancel()
 
 			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
@@ -286,6 +307,8 @@ func (d *Demo) RunE() error {
 
 			errCh <- nil
 		case <-ctx.Done():
+			errCh <- nil
+
 			return
 		}
 	}()
@@ -294,16 +317,15 @@ func (d *Demo) RunE() error {
 
 	cancel()
 
-	// Wait for the interrupt goroutine to finish cleanup if it was triggered
-	select {
-	case cleanupErr := <-errCh:
-		if cleanupErr != nil {
-			return cleanupErr
-		}
-	default:
+	if cleanupErr := <-errCh; cleanupErr != nil {
+		return cleanupErr
 	}
 
 	if runErr != nil {
+		if errors.Is(runErr, errInterrupt) || errors.Is(runErr, context.Canceled) {
+			return nil
+		}
+
 		return fmt.Errorf("run: %w", runErr)
 	}
 

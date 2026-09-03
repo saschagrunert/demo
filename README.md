@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/saschagrunert/demo/actions/workflows/test.yml/badge.svg)](https://github.com/saschagrunert/demo/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/saschagrunert/demo/branch/main/graph/badge.svg)](https://codecov.io/gh/saschagrunert/demo)
-[![docs](https://img.shields.io/badge/godoc-demo-blue)](https://godoc.org/github.com/saschagrunert/demo)
+[![docs](https://pkg.go.dev/badge/github.com/saschagrunert/demo)](https://pkg.go.dev/github.com/saschagrunert/demo)
 
 ![demo](.github/demo.svg)
 
@@ -26,7 +26,7 @@ multiple _runs_. For example, if we create a demo like this:
 package main
 
 import (
-	demo "github.com/saschagrunert/demo"
+	"github.com/saschagrunert/demo"
 )
 
 func main() {
@@ -94,35 +94,41 @@ func main() {
 }
 
 // example is the single demo run for this application
-func example() *Run {
+func example() *demo.Run {
 	// A new run contains a title and an optional description
-	r := NewRun(
+	r := demo.NewRun(
 		"Demo Title",
 		"Some additional",
 		"multi-line description",
 		"is possible as well!",
 	)
 
-	// A single step can consist of a description and a command to be executed
-	r.Step(S(
+	// A single step can consist of a description and a command to be executed.
+	r.Step(demo.S(
 		"This is a possible",
 		"description of the following command",
 		"to be executed",
-	), S(
+	), demo.S(
 		"echo hello world",
 	))
 
 	// Commands do not need to have a description, so we could set it to `nil`
-	r.Step(nil, S(
+	r.Step(nil, demo.S(
 		"echo without description",
 		"but this can be executed in",
 		"multiple lines as well",
 	))
 
 	// It is also not needed at all to provide a command
-	r.Step(S(
+	r.Step(demo.S(
 		"Just a description without a command",
 	), nil)
+
+	// Steps that are allowed to fail use StepCanFail
+	r.StepCanFail(demo.S("This command may fail"), demo.S("exit 1"))
+
+	// Breakpoints pause execution when --with-breakpoints is set
+	r.BreakPoint()
 
 	return r
 }
@@ -132,6 +138,14 @@ The `example()` function creates a new demo run, which itself contains of
 multiple steps. These steps are executed in order, can contain a description and
 a command to be executed. Wrapping commands in multiple lines will automatically
 create a line break in the command line.
+
+`StepCanFail` works like `Step` but does not stop the demo when the command
+exits with a non-zero status. The `--continue-on-error` flag applies this
+behavior to all steps.
+
+`BreakPoint` inserts a pause that only takes effect when `--with-breakpoints`
+is passed. This is useful for inserting manual checkpoints in an otherwise
+automatic demo.
 
 ## Setup and Cleanup functions
 
@@ -151,7 +165,7 @@ func main() {
 // setup will run before every demo
 func setup(ctx context.Context, _ *cli.Command) error {
 	// EnsureWithContext can be used for easy sequential command execution
-	return EnsureWithContext(ctx,
+	return demo.EnsureWithContext(ctx,
 		"echo 'Doing first setup...'",
 		"echo 'Doing second setup...'",
 		"echo 'Doing third setup...'",
@@ -160,7 +174,7 @@ func setup(ctx context.Context, _ *cli.Command) error {
 
 // cleanup will run after every demo
 func cleanup(ctx context.Context, _ *cli.Command) error {
-	return EnsureWithContext(ctx, "echo 'Doing cleanup...'")
+	return demo.EnsureWithContext(ctx, "echo 'Doing cleanup...'")
 }
 ```
 
@@ -170,18 +184,18 @@ The working directory for command execution can be configured per run or changed
 between steps:
 
 ```go
-func example() *Run {
-	r := NewRun("Working Directory Demo")
+func example() *demo.Run {
+	r := demo.NewRun("Working Directory Demo")
 
 	// Set the initial working directory for all steps
 	r.SetWorkDir("/tmp")
 
-	r.Step(S("Show current directory"), S("pwd"))
+	r.Step(demo.S("Show current directory"), demo.S("pwd"))
 
 	// Change the working directory between steps
 	r.Chdir("/home")
 
-	r.Step(S("Now in a different directory"), S("pwd"))
+	r.Step(demo.S("Now in a different directory"), demo.S("pwd"))
 
 	return r
 }
@@ -197,12 +211,12 @@ the current process directory.
 Custom environment variables can be set for all steps in a run:
 
 ```go
-func example() *Run {
-	r := NewRun("Environment Demo")
+func example() *demo.Run {
+	r := demo.NewRun("Environment Demo")
 
 	r.SetEnv("MY_VAR=hello", "OTHER_VAR=world")
 
-	r.Step(S("Show env"), S("echo $MY_VAR $OTHER_VAR"))
+	r.Step(demo.S("Show env"), demo.S("echo $MY_VAR $OTHER_VAR"))
 
 	return r
 }
@@ -211,14 +225,46 @@ func example() *Run {
 Variables are appended to the current process environment. Multiple calls to
 `SetEnv` accumulate variables.
 
-## Terminal raw mode
+## Signal handling
+
+The demo framework handles SIGINT (Ctrl-C) and SIGTERM. When either signal is
+received, the current context is cancelled and the demo-level cleanup function
+runs with a 10-second timeout. In continuous mode (`--continuously`), an
+interrupt causes a clean exit with no error. In non-continuous mode, the demo
+exits cleanly as well.
 
 During the typewriter animation and while waiting for user input, the terminal
-is put into raw mode. This suppresses any visible output from keypresses (such
-as newlines from pressing Enter) during the animation. When the animation
-completes, the terminal is restored to its previous state. This only applies
-when stdin is an interactive terminal; non-terminal input (e.g., in tests) is
-unaffected.
+is in raw mode, which means the kernel does not translate Ctrl-C into SIGINT.
+Instead, the framework detects the Ctrl-C byte directly and stops the demo,
+running cleanup as expected.
+
+## Programmatic usage
+
+`RunE` starts the demo and returns any error instead of calling `os.Exit`.
+This is useful for testing or when embedding a demo in a larger application:
+
+```go
+d := demo.New()
+if err := d.RunE(); err != nil {
+	log.Fatal(err)
+}
+```
+
+Individual runs can be executed directly with `RunWithOptions`, bypassing the
+CLI flag parsing:
+
+```go
+r := demo.NewRun("My Run")
+r.Step(demo.S("Hello"), demo.S("echo hello"))
+
+err := r.RunWithOptions(&demo.Options{
+	Auto:        true,
+	AutoTimeout: 500 * time.Millisecond,
+	Shell:       "bash",
+})
+```
+
+See the `Options` struct documentation for the full list of fields.
 
 # Contributing
 
