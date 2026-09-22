@@ -5,10 +5,10 @@ go 1.27
 require (
 	github.com/fatih/color v1.19.0
 	github.com/mattn/go-isatty v0.0.24
-	github.com/onsi/ginkgo/v2 v2.32.2
-	github.com/onsi/gomega v1.43.0
+	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/gomega v1.43.1
 	github.com/saschagrunert/ccli/v3 v3.0.1
-	github.com/urfave/cli/v3 v3.11.0
+	github.com/urfave/cli/v3 v3.12.0
 	golang.org/x/term v0.46.0
 )
 
