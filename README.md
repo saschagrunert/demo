@@ -76,13 +76,12 @@ d.Name = "A demo of something"
 d.Usage = "Learn how this framework is being used"
 ```
 
-You can configure output palettes at construction time and switch them from the
-CLI with `--theme`:
+Theme support works out of the box (`--theme auto|dark|light`). You only need
+constructor options when overriding the defaults:
 
 ```go
 d := demo.New(
-	demo.WithPalette(demo.ThemeDark, demo.DarkPalette),
-	demo.WithPalette(demo.ThemeLight, demo.LightPalette),
+	demo.WithPalettes(myDarkPalette, myLightPalette),
 )
 ```
 

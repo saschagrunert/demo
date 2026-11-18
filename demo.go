@@ -260,6 +260,14 @@ func WithPalette(theme string, palette Palette) NewOption {
 	}
 }
 
+// WithPalettes overrides both built-in palettes in one call.
+func WithPalettes(dark, light Palette) NewOption {
+	return func(d *Demo) {
+		d.palettes[ThemeDark] = dark
+		d.palettes[ThemeLight] = light
+	}
+}
+
 // New creates a new Demo instance.
 func New(options ...NewOption) *Demo {
 	emptyFn := func(context.Context, *cli.Command) error { return nil }

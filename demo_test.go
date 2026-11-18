@@ -217,6 +217,39 @@ var _ = Describe("Demo", func() {
 		})
 	})
 
+	It("should run with paired palettes configured via New options", func() {
+		withArgs([]string{
+			appName, "--run1", "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
+		}, func() {
+			origNoColor := color.NoColor
+			color.NoColor = false
+			defer func() { color.NoColor = origNoColor }()
+
+			run1 := demo.NewRun("Run 1", "desc")
+			out := &strings.Builder{}
+			Expect(run1.SetOutput(out)).To(Succeed())
+
+			sut := demo.New(
+				demo.WithPalettes(
+					demo.Palette{
+						Title:       []color.Attribute{color.FgRed},
+						Description: []color.Attribute{color.FgRed},
+						Command:     []color.Attribute{color.FgRed},
+					},
+					demo.Palette{
+						Title:       []color.Attribute{color.FgMagenta},
+						Description: []color.Attribute{color.FgMagenta},
+						Command:     []color.Attribute{color.FgMagenta},
+					},
+				),
+			)
+			sut.Add(run1, "run1", "first run")
+
+			Expect(sut.RunE()).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("\x1b[35m"))
+		})
+	})
+
 	It("should handle multiple runs with setup and cleanup", func() {
 		withArgs([]string{
 			appName, "--all", autoFlag, autoTimeoutFlag, immediateFlag,
