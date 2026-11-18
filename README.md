@@ -49,6 +49,7 @@ GLOBAL OPTIONS:
    --auto, -a                    run the demo in automatic mode, where every step gets executed automatically
    --dry-run                     run the demo and only prints the commands
    --no-color                    run the demo and output to be without colors
+   --theme string                set output theme palette (`dark` or `light`) (default: dark)
    --auto-timeout auto, -t auto  the timeout to be waited when auto is enabled (default: 1s)
    --with-breakpoints            breakpoint
    --continue-on-error           continue if there a step fails
@@ -73,6 +74,17 @@ d := demo.New()
 // that we can set its properties as expected:
 d.Name = "A demo of something"
 d.Usage = "Learn how this framework is being used"
+```
+
+You can configure output palettes at construction time and switch them from the
+CLI with `--theme`:
+
+```go
+d := demo.New(
+	demo.WithDefaultTheme(demo.ThemeDark),
+	demo.WithPalette(demo.ThemeDark, demo.DarkPalette),
+	demo.WithPalette(demo.ThemeLight, demo.LightPalette),
+)
 ```
 
 ## Creating runs inside demos

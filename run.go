@@ -54,6 +54,29 @@ type step struct {
 	dir                   string
 }
 
+// Palette defines the terminal color attributes used by a run.
+type Palette struct {
+	Title       []color.Attribute
+	Description []color.Attribute
+	Command     []color.Attribute
+}
+
+var (
+	// DarkPalette is the default high-contrast palette for dark backgrounds.
+	DarkPalette = Palette{
+		Title:       []color.Attribute{color.FgCyan},
+		Description: []color.Attribute{color.FgHiCyan},
+		Command:     []color.Attribute{color.FgGreen},
+	}
+
+	// LightPalette is the default high-contrast palette for light backgrounds.
+	LightPalette = Palette{
+		Title:       []color.Attribute{color.FgBlue},
+		Description: []color.Attribute{color.FgBlue},
+		Command:     []color.Attribute{color.FgGreen},
+	}
+)
+
 // Options specify the run options.
 type Options struct {
 	//nolint:containedctx // required to thread context through to subprocesses
@@ -74,6 +97,10 @@ type Options struct {
 	DryRun bool
 	// NoColor disables colored output.
 	NoColor bool
+	// Theme selects the active palette variant (for example "dark" or "light").
+	Theme string
+	// Palette overrides the selected theme palette when provided.
+	Palette Palette
 	// Immediate disables the typewriter animation and prints output instantly.
 	Immediate bool
 	// SkipSteps skips the first N steps in the run. Negative values are treated as 0.
@@ -118,6 +145,7 @@ func optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 		HideDescriptions: cmd.Bool(FlagHideDescriptions),
 		DryRun:           cmd.Bool(FlagDryRun),
 		NoColor:          noColor,
+		Theme:            cmd.String(FlagTheme),
 		Immediate:        cmd.Bool(FlagImmediate),
 		SkipSteps:        cmd.Int(FlagSkipSteps),
 		Shell:            cmd.String(FlagShell),
@@ -135,9 +163,41 @@ func initColorFunctions(opts *Options) {
 		opts.whiteSprintf = fmt.Sprintf
 		opts.greenSprintf = fmt.Sprintf
 	} else {
-		opts.cyanSprintf = color.CyanString
-		opts.whiteSprintf = color.New(color.FgWhite, color.Faint).SprintfFunc()
-		opts.greenSprintf = color.GreenString
+		palette := opts.Palette
+		if palette.isZero() {
+			palette = defaultPalette(opts.Theme)
+		}
+
+		opts.cyanSprintf = paletteSprintf(palette.Title, color.CyanString)
+		opts.whiteSprintf = paletteSprintf(
+			palette.Description,
+			color.New(color.FgWhite, color.Faint).SprintfFunc(),
+		)
+		opts.greenSprintf = paletteSprintf(palette.Command, color.GreenString)
+	}
+}
+
+func paletteSprintf(
+	attrs []color.Attribute,
+	fallback func(format string, a ...any) string,
+) func(format string, a ...any) string {
+	if len(attrs) == 0 {
+		return fallback
+	}
+
+	return color.New(attrs...).SprintfFunc()
+}
+
+func (p Palette) isZero() bool {
+	return len(p.Title) == 0 && len(p.Description) == 0 && len(p.Command) == 0
+}
+
+func defaultPalette(theme string) Palette {
+	switch strings.ToLower(theme) {
+	case ThemeLight:
+		return LightPalette
+	default:
+		return DarkPalette
 	}
 }
 

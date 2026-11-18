@@ -22,9 +22,11 @@ import (
 type Demo struct {
 	*cli.Command
 
-	runs    []*runFlag
-	setup   func(context.Context, *cli.Command) error
-	cleanup func(context.Context, *cli.Command) error
+	runs         []*runFlag
+	setup        func(context.Context, *cli.Command) error
+	cleanup      func(context.Context, *cli.Command) error
+	defaultTheme string
+	palettes     map[string]Palette
 }
 
 type runFlag struct {
@@ -66,6 +68,9 @@ const (
 	// FlagNoColor true to print without colors, special characters for writing into file.
 	FlagNoColor = "no-color"
 
+	// FlagTheme allows selecting the output theme.
+	FlagTheme = "theme"
+
 	// FlagSkipSteps is the flag for skipping n amount of steps.
 	FlagSkipSteps = "skip-steps"
 
@@ -80,9 +85,15 @@ const (
 
 	// DefaultShell is the default shell used to execute commands.
 	DefaultShell = "bash"
+
+	// ThemeDark is the default theme for terminal backgrounds using dark colors.
+	ThemeDark = "dark"
+
+	// ThemeLight is the theme for terminal backgrounds using light colors.
+	ThemeLight = "light"
 )
 
-func createFlags() []cli.Flag {
+func createFlags(defaultTheme string) []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
 			Name:    FlagAll,
@@ -103,6 +114,12 @@ func createFlags() []cli.Flag {
 		&cli.BoolFlag{
 			Name:  FlagNoColor,
 			Usage: "run the demo and output to be without colors",
+		},
+		&cli.StringFlag{
+			Name:        FlagTheme,
+			Value:       defaultTheme,
+			DefaultText: defaultTheme,
+			Usage:       "set output theme palette (`dark` or `light`)",
 		},
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,
@@ -152,12 +169,23 @@ func createFlags() []cli.Flag {
 	}
 }
 
-func collectRunFunctions(cmd *cli.Command, runs []*runFlag) []runAction {
+func collectRunFunctions(
+	ctx context.Context,
+	cmd *cli.Command,
+	d *Demo,
+	runs []*runFlag,
+) []runAction {
 	runFns := make([]runAction, 0, len(runs))
+	opts := d.optionsFrom(ctx, cmd)
 
 	for _, x := range runs {
 		if isFlagSet(cmd, x.flag) || cmd.Bool(FlagAll) {
-			runFns = append(runFns, x.run.Run)
+			run := x.run
+			runFns = append(runFns, func(context.Context, *cli.Command) error {
+				runOpts := opts
+
+				return run.RunWithOptions(&runOpts)
+			})
 		}
 	}
 
@@ -220,21 +248,47 @@ func runContinuously(ctx context.Context, runSelected func() error) error {
 	}
 }
 
+// NewOption configures a demo created through New.
+type NewOption func(*Demo)
+
+// WithDefaultTheme sets the default palette theme used by the --theme flag.
+func WithDefaultTheme(theme string) NewOption {
+	return func(d *Demo) {
+		d.defaultTheme = theme
+	}
+}
+
+// WithPalette overrides the palette for a theme key (for example "dark" or "light").
+func WithPalette(theme string, palette Palette) NewOption {
+	return func(d *Demo) {
+		d.palettes[theme] = palette
+	}
+}
+
 // New creates a new Demo instance.
-func New() *Demo {
+func New(options ...NewOption) *Demo {
 	emptyFn := func(context.Context, *cli.Command) error { return nil }
 	demo := &Demo{
-		Command: ccli.NewCommand(),
-		runs:    nil,
-		setup:   emptyFn,
-		cleanup: emptyFn,
+		Command:      ccli.NewCommand(),
+		runs:         nil,
+		setup:        emptyFn,
+		cleanup:      emptyFn,
+		defaultTheme: ThemeDark,
+		palettes: map[string]Palette{
+			ThemeDark:  DarkPalette,
+			ThemeLight: LightPalette,
+		},
 	}
 
-	demo.Flags = createFlags()
+	for _, option := range options {
+		option(demo)
+	}
+
+	demo.Flags = createFlags(demo.defaultTheme)
 	demo.UseShortOptionHandling = true
 
 	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
-		runFns := collectRunFunctions(cmd, demo.runs)
+		runFns := collectRunFunctions(ctx, cmd, demo, demo.runs)
 		runSelected := createRunSelected(demo, ctx, cmd, runFns)
 
 		if cmd.Bool(FlagContinuously) {
@@ -245,6 +299,32 @@ func New() *Demo {
 	}
 
 	return demo
+}
+
+func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
+	opts := optionsFrom(ctx, cmd)
+	opts.Theme = cmd.String(FlagTheme)
+	opts.Palette = d.paletteForTheme(opts.Theme)
+	initColorFunctions(&opts)
+
+	return opts
+}
+
+func (d *Demo) paletteForTheme(theme string) Palette {
+	selectedTheme := theme
+	if selectedTheme == "" {
+		selectedTheme = d.defaultTheme
+	}
+
+	if palette, ok := d.palettes[selectedTheme]; ok {
+		return palette
+	}
+
+	if palette, ok := d.palettes[d.defaultTheme]; ok {
+		return palette
+	}
+
+	return defaultPalette(d.defaultTheme)
 }
 
 // Setup sets the setup function called before each run.

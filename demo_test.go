@@ -3,8 +3,10 @@ package demo_test
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 
+	"github.com/fatih/color"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/saschagrunert/demo"
@@ -160,6 +162,46 @@ var _ = Describe("Demo", func() {
 			sut.Add(run2, "run2", "second run")
 
 			Expect(sut.RunE()).To(Succeed())
+		})
+	})
+
+	It("should run with light theme", func() {
+		withArgs([]string{
+			appName, "--run1", "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
+		}, func() {
+			run1 := demo.NewRun("Run 1")
+			sut := demo.New()
+			sut.Add(run1, "run1", "first run")
+
+			Expect(sut.RunE()).To(Succeed())
+		})
+	})
+
+	It("should run with custom palette configured via New options", func() {
+		withArgs([]string{
+			appName, "--run1", "--theme=presentation", autoFlag, autoTimeoutFlag, immediateFlag,
+		}, func() {
+			origNoColor := color.NoColor
+			color.NoColor = false
+			defer func() { color.NoColor = origNoColor }()
+
+			run1 := demo.NewRun("Run 1")
+			run1.Step(demo.S("step text"), nil)
+
+			out := &strings.Builder{}
+			Expect(run1.SetOutput(out)).To(Succeed())
+
+			sut := demo.New(
+				demo.WithPalette("presentation", demo.Palette{
+					Title:       []color.Attribute{color.FgRed},
+					Description: []color.Attribute{color.FgMagenta},
+					Command:     []color.Attribute{color.FgYellow},
+				}),
+			)
+			sut.Add(run1, "run1", "first run")
+
+			Expect(sut.RunE()).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("\x1b[35m"))
 		})
 	})
 
