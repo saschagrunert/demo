@@ -25,7 +25,10 @@ type Demo struct {
 	runs     []*runFlag
 	setup    func(context.Context, *cli.Command) error
 	cleanup  func(context.Context, *cli.Command) error
-	palettes map[string]Palette
+	palettes struct {
+		dark  Palette
+		light Palette
+	}
 }
 
 type runFlag struct {
@@ -253,18 +256,11 @@ func runContinuously(ctx context.Context, runSelected func() error) error {
 // NewOption configures a demo created through New.
 type NewOption func(*Demo)
 
-// WithPalette overrides the palette for a theme key (for example "dark" or "light").
-func WithPalette(theme string, palette Palette) NewOption {
-	return func(d *Demo) {
-		d.palettes[theme] = palette
-	}
-}
-
 // WithPalettes overrides both built-in palettes in one call.
 func WithPalettes(dark, light Palette) NewOption {
 	return func(d *Demo) {
-		d.palettes[ThemeDark] = dark
-		d.palettes[ThemeLight] = light
+		d.palettes.dark = dark
+		d.palettes.light = light
 	}
 }
 
@@ -276,11 +272,9 @@ func New(options ...NewOption) *Demo {
 		runs:    nil,
 		setup:   emptyFn,
 		cleanup: emptyFn,
-		palettes: map[string]Palette{
-			ThemeDark:  DarkPalette,
-			ThemeLight: LightPalette,
-		},
 	}
+	demo.palettes.dark = DarkPalette
+	demo.palettes.light = LightPalette
 
 	for _, option := range options {
 		option(demo)
@@ -323,15 +317,14 @@ func (d *Demo) paletteForTheme(theme string) Palette {
 		return Palette{}
 	}
 
-	if palette, ok := d.palettes[selectedTheme]; ok {
-		return palette
+	switch selectedTheme {
+	case ThemeLight:
+		return d.palettes.light
+	case ThemeDark:
+		return d.palettes.dark
+	default:
+		return d.palettes.dark
 	}
-
-	if palette, ok := d.palettes[ThemeDark]; ok {
-		return palette
-	}
-
-	return defaultPalette(ThemeDark)
 }
 
 // Setup sets the setup function called before each run.

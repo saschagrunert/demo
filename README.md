@@ -80,27 +80,20 @@ Theme support works out of the box (`--theme auto|dark|light`). You only need
 constructor options when overriding the defaults:
 
 ```go
+myDarkPalette := demo.Palette{
+	Title:       []color.Attribute{color.FgCyan},
+	Description: []color.Attribute{color.FgHiCyan},
+	Command:     []color.Attribute{color.FgGreen},
+}
+myLightPalette := demo.Palette{
+	Title:       []color.Attribute{color.FgBlue},
+	Description: []color.Attribute{color.FgBlue},
+	Command:     []color.Attribute{color.FgGreen},
+}
+
 d := demo.New(
 	demo.WithPalettes(myDarkPalette, myLightPalette),
 )
-```
-
-Declare a custom palette for a dedicated theme key:
-
-```go
-d := demo.New(
-	demo.WithPalette("presentation", demo.Palette{
-		Title:       []color.Attribute{color.FgHiBlue},
-		Description: []color.Attribute{color.FgHiCyan},
-		Command:     []color.Attribute{color.FgHiGreen},
-	}),
-)
-```
-
-Then run your demo with:
-
-```bash
-./my-demo --theme presentation
 ```
 
 ## Creating runs inside demos
