@@ -210,7 +210,13 @@ func defaultPalette(theme string) Palette {
 func detectLightBackground() bool {
 	colorFGBG := os.Getenv("COLORFGBG")
 	if colorFGBG == "" {
-		return false
+		termProgram := strings.ToLower(os.Getenv("TERM_PROGRAM"))
+		if strings.Contains(termProgram, "apple_terminal") {
+			return true
+		}
+
+		colorTerm := strings.ToLower(os.Getenv("COLORTERM"))
+		return strings.Contains(colorTerm, "light") || strings.Contains(colorTerm, "bright")
 	}
 
 	parts := strings.Split(colorFGBG, ";")
