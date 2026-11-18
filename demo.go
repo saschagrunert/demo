@@ -22,11 +22,10 @@ import (
 type Demo struct {
 	*cli.Command
 
-	runs         []*runFlag
-	setup        func(context.Context, *cli.Command) error
-	cleanup      func(context.Context, *cli.Command) error
-	defaultTheme string
-	palettes     map[string]Palette
+	runs     []*runFlag
+	setup    func(context.Context, *cli.Command) error
+	cleanup  func(context.Context, *cli.Command) error
+	palettes map[string]Palette
 }
 
 type runFlag struct {
@@ -93,7 +92,7 @@ const (
 	ThemeLight = "light"
 )
 
-func createFlags(defaultTheme string) []cli.Flag {
+func createFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
 			Name:    FlagAll,
@@ -117,8 +116,8 @@ func createFlags(defaultTheme string) []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:        FlagTheme,
-			Value:       defaultTheme,
-			DefaultText: defaultTheme,
+			Value:       ThemeDark,
+			DefaultText: ThemeDark,
 			Usage:       "set output theme palette (`dark` or `light`)",
 		},
 		&cli.DurationFlag{
@@ -251,13 +250,6 @@ func runContinuously(ctx context.Context, runSelected func() error) error {
 // NewOption configures a demo created through New.
 type NewOption func(*Demo)
 
-// WithDefaultTheme sets the default palette theme used by the --theme flag.
-func WithDefaultTheme(theme string) NewOption {
-	return func(d *Demo) {
-		d.defaultTheme = theme
-	}
-}
-
 // WithPalette overrides the palette for a theme key (for example "dark" or "light").
 func WithPalette(theme string, palette Palette) NewOption {
 	return func(d *Demo) {
@@ -269,11 +261,10 @@ func WithPalette(theme string, palette Palette) NewOption {
 func New(options ...NewOption) *Demo {
 	emptyFn := func(context.Context, *cli.Command) error { return nil }
 	demo := &Demo{
-		Command:      ccli.NewCommand(),
-		runs:         nil,
-		setup:        emptyFn,
-		cleanup:      emptyFn,
-		defaultTheme: ThemeDark,
+		Command: ccli.NewCommand(),
+		runs:    nil,
+		setup:   emptyFn,
+		cleanup: emptyFn,
 		palettes: map[string]Palette{
 			ThemeDark:  DarkPalette,
 			ThemeLight: LightPalette,
@@ -284,7 +275,7 @@ func New(options ...NewOption) *Demo {
 		option(demo)
 	}
 
-	demo.Flags = createFlags(demo.defaultTheme)
+	demo.Flags = createFlags()
 	demo.UseShortOptionHandling = true
 
 	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
@@ -313,18 +304,18 @@ func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 func (d *Demo) paletteForTheme(theme string) Palette {
 	selectedTheme := theme
 	if selectedTheme == "" {
-		selectedTheme = d.defaultTheme
+		selectedTheme = ThemeDark
 	}
 
 	if palette, ok := d.palettes[selectedTheme]; ok {
 		return palette
 	}
 
-	if palette, ok := d.palettes[d.defaultTheme]; ok {
+	if palette, ok := d.palettes[ThemeDark]; ok {
 		return palette
 	}
 
-	return defaultPalette(d.defaultTheme)
+	return defaultPalette(ThemeDark)
 }
 
 // Setup sets the setup function called before each run.

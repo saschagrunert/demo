@@ -81,7 +81,6 @@ CLI with `--theme`:
 
 ```go
 d := demo.New(
-	demo.WithDefaultTheme(demo.ThemeDark),
 	demo.WithPalette(demo.ThemeDark, demo.DarkPalette),
 	demo.WithPalette(demo.ThemeLight, demo.LightPalette),
 )
