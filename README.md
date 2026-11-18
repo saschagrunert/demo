@@ -85,6 +85,24 @@ d := demo.New(
 )
 ```
 
+Declare a custom palette for a dedicated theme key:
+
+```go
+d := demo.New(
+	demo.WithPalette("presentation", demo.Palette{
+		Title:       []color.Attribute{color.FgHiBlue},
+		Description: []color.Attribute{color.FgHiCyan},
+		Command:     []color.Attribute{color.FgHiGreen},
+	}),
+)
+```
+
+Then run your demo with:
+
+```bash
+./my-demo --theme presentation
+```
+
 ## Creating runs inside demos
 
 To have something to show, we need to create a run and add it to the demo. This
