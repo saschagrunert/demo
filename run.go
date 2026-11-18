@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -194,11 +195,32 @@ func (p Palette) isZero() bool {
 
 func defaultPalette(theme string) Palette {
 	switch strings.ToLower(theme) {
+	case ThemeAuto:
+		if detectLightBackground() {
+			return LightPalette
+		}
+		return DarkPalette
 	case ThemeLight:
 		return LightPalette
 	default:
 		return DarkPalette
 	}
+}
+
+func detectLightBackground() bool {
+	colorFGBG := os.Getenv("COLORFGBG")
+	if colorFGBG == "" {
+		return false
+	}
+
+	parts := strings.Split(colorFGBG, ";")
+	bgRaw := parts[len(parts)-1]
+	bg, err := strconv.Atoi(bgRaw)
+	if err != nil {
+		return false
+	}
+
+	return bg >= 7
 }
 
 // S is a short-hand for converting string slice syntaxes.

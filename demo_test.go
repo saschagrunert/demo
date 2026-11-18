@@ -177,6 +177,18 @@ var _ = Describe("Demo", func() {
 		})
 	})
 
+	It("should run with auto theme", func() {
+		withArgs([]string{
+			appName, "--run1", "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
+		}, func() {
+			run1 := demo.NewRun("Run 1")
+			sut := demo.New()
+			sut.Add(run1, "run1", "first run")
+
+			Expect(sut.RunE()).To(Succeed())
+		})
+	})
+
 	It("should run with custom palette configured via New options", func() {
 		withArgs([]string{
 			appName, "--run1", "--theme=presentation", autoFlag, autoTimeoutFlag, immediateFlag,

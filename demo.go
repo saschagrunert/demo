@@ -90,6 +90,9 @@ const (
 
 	// ThemeLight is the theme for terminal backgrounds using light colors.
 	ThemeLight = "light"
+
+	// ThemeAuto auto-detects the terminal background and picks a palette.
+	ThemeAuto = "auto"
 )
 
 func createFlags() []cli.Flag {
@@ -116,9 +119,9 @@ func createFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:        FlagTheme,
-			Value:       ThemeDark,
-			DefaultText: ThemeDark,
-			Usage:       "set output theme palette (`dark` or `light`)",
+			Value:       ThemeAuto,
+			DefaultText: ThemeAuto,
+			Usage:       "set output theme palette (`auto`, `dark` or `light`)",
 		},
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,
@@ -295,7 +298,9 @@ func New(options ...NewOption) *Demo {
 func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 	opts := optionsFrom(ctx, cmd)
 	opts.Theme = cmd.String(FlagTheme)
-	opts.Palette = d.paletteForTheme(opts.Theme)
+	if opts.Theme != ThemeAuto {
+		opts.Palette = d.paletteForTheme(opts.Theme)
+	}
 	initColorFunctions(&opts)
 
 	return opts
@@ -305,6 +310,9 @@ func (d *Demo) paletteForTheme(theme string) Palette {
 	selectedTheme := theme
 	if selectedTheme == "" {
 		selectedTheme = ThemeDark
+	}
+	if selectedTheme == ThemeAuto {
+		return Palette{}
 	}
 
 	if palette, ok := d.palettes[selectedTheme]; ok {
