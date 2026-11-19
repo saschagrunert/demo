@@ -278,8 +278,8 @@ func New(options ...NewOption) *Demo {
 		setup:   emptyFn,
 		cleanup: emptyFn,
 	}
-	demo.palettes.dark = DarkPalette
-	demo.palettes.light = LightPalette
+	demo.palettes.dark = DefaultDarkPalette()
+	demo.palettes.light = DefaultLightPalette()
 
 	for _, option := range options {
 		option(demo)
@@ -389,19 +389,7 @@ func (d *Demo) RunE() error {
 
 func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 	opts := optionsFrom(ctx, cmd)
-
-	resolvedTheme, err := normalizedTheme(opts.Theme)
-	if err != nil {
-		resolvedTheme = ThemeDark
-	}
-
-	if resolvedTheme == ThemeAuto {
-		if detectLightBackground() {
-			resolvedTheme = ThemeLight
-		} else {
-			resolvedTheme = ThemeDark
-		}
-	}
+	resolvedTheme := resolveTheme(opts.Theme)
 
 	opts.Theme = resolvedTheme
 	opts.Palette = d.paletteForTheme(resolvedTheme)
@@ -412,11 +400,28 @@ func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 }
 
 func (d *Demo) paletteForTheme(theme string) Palette {
-	if strings.EqualFold(theme, ThemeLight) {
+	if theme == ThemeLight {
 		return d.palettes.light
 	}
 
 	return d.palettes.dark
+}
+
+func resolveTheme(theme string) string {
+	normalized, err := normalizedTheme(theme)
+	if err != nil {
+		return ThemeDark
+	}
+
+	if normalized == ThemeAuto {
+		if detectLightBackground() {
+			return ThemeLight
+		}
+
+		return ThemeDark
+	}
+
+	return normalized
 }
 
 func normalizedTheme(theme string) (string, error) {

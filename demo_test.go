@@ -92,6 +92,25 @@ func runWithCustomPalettes(args []string) {
 	})
 }
 
+func runWithExpectedTitleColor(args []string, expectedColorCode string) {
+	withArgs(args, func() {
+		origNoColor := color.NoColor
+		color.NoColor = false
+
+		defer func() { color.NoColor = origNoColor }()
+
+		run1 := demo.NewRun("Run 1")
+		out := &strings.Builder{}
+		Expect(run1.SetOutput(out)).To(Succeed())
+
+		sut := demo.New()
+		sut.Add(run1, "run1", "first run")
+
+		Expect(sut.RunE()).To(Succeed())
+		Expect(out.String()).To(ContainSubstring(expectedColorCode))
+	})
+}
+
 var _ = Describe("Demo", func() {
 	It("should succeed to run", func() {
 		withArgs([]string{appName}, func() {
@@ -219,26 +238,16 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("should run with light theme", func() {
-		withArgs([]string{
+		runWithExpectedTitleColor([]string{
 			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-
-			Expect(sut.RunE()).To(Succeed())
-		})
+		}, "\x1b[34m")
 	})
 
 	It("should run with auto theme", func() {
-		withArgs([]string{
-			appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-
-			Expect(sut.RunE()).To(Succeed())
+		withEnv("COLORFGBG", "15;7", func() {
+			runWithExpectedTitleColor([]string{
+				appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
+			}, "\x1b[34m")
 		})
 	})
 
@@ -257,15 +266,9 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("should run with case-insensitive theme value", func() {
-		withArgs([]string{
+		runWithExpectedTitleColor([]string{
 			appName, run1Flag, "--theme=LIGHT", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-
-			Expect(sut.RunE()).To(Succeed())
-		})
+		}, "\x1b[34m")
 	})
 
 	It("should run with paired palettes configured via New options", func() {

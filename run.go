@@ -67,25 +67,23 @@ type Palette struct {
 	Command     []color.Attribute
 }
 
-var (
-	// DarkPalette is the default palette for dark backgrounds.
-	//
-	//nolint:gochecknoglobals // exported defaults are part of the public API
-	DarkPalette = Palette{
+// DefaultDarkPalette returns the default palette for dark backgrounds.
+func DefaultDarkPalette() Palette {
+	return Palette{
 		Title:       []color.Attribute{color.FgCyan},
 		Description: []color.Attribute{color.FgWhite, color.Faint},
 		Command:     []color.Attribute{color.FgGreen},
 	}
+}
 
-	// LightPalette is the default high-contrast palette for light backgrounds.
-	//
-	//nolint:gochecknoglobals // exported defaults are part of the public API
-	LightPalette = Palette{
+// DefaultLightPalette returns the default high-contrast palette for light backgrounds.
+func DefaultLightPalette() Palette {
+	return Palette{
 		Title:       []color.Attribute{color.FgBlue},
 		Description: []color.Attribute{color.FgHiBlue},
 		Command:     []color.Attribute{color.FgGreen},
 	}
-)
+}
 
 // Options specify the run options.
 type Options struct {
@@ -220,17 +218,11 @@ func mergePaletteWithDefaults(theme string, palette Palette) Palette {
 }
 
 func defaultPalette(theme string) Palette {
-	switch strings.ToLower(theme) {
-	case ThemeAuto:
-		if detectLightBackground() {
-			return LightPalette
-		}
-
-		return DarkPalette
+	switch resolveTheme(theme) {
 	case ThemeLight:
-		return LightPalette
+		return DefaultLightPalette()
 	default:
-		return DarkPalette
+		return DefaultDarkPalette()
 	}
 }
 
