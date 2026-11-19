@@ -68,12 +68,12 @@ type Palette struct {
 }
 
 var (
-	// DarkPalette is the default high-contrast palette for dark backgrounds.
+	// DarkPalette is the default palette for dark backgrounds.
 	//
 	//nolint:gochecknoglobals // exported defaults are part of the public API
 	DarkPalette = Palette{
 		Title:       []color.Attribute{color.FgCyan},
-		Description: []color.Attribute{color.FgHiCyan},
+		Description: []color.Attribute{color.FgWhite, color.Faint},
 		Command:     []color.Attribute{color.FgGreen},
 	}
 

@@ -82,7 +82,7 @@ constructor options when overriding the defaults:
 ```go
 myDarkPalette := demo.Palette{
 	Title:       []color.Attribute{color.FgCyan},
-	Description: []color.Attribute{color.FgHiCyan},
+	Description: []color.Attribute{color.FgWhite, color.Faint},
 	Command:     []color.Attribute{color.FgGreen},
 }
 myLightPalette := demo.Palette{
