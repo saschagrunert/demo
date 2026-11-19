@@ -49,7 +49,7 @@ GLOBAL OPTIONS:
    --auto, -a                    run the demo in automatic mode, where every step gets executed automatically
    --dry-run                     run the demo and only prints the commands
    --no-color                    run the demo and output to be without colors
-   --theme string                set output theme palette (`auto`, `dark` or `light`) (default: auto)
+   --theme string                set output theme palette (auto, dark or light) (default: auto)
    --auto-timeout auto, -t auto  the timeout to be waited when auto is enabled (default: 1s)
    --with-breakpoints            breakpoint
    --continue-on-error           continue if there a step fails
@@ -87,7 +87,7 @@ myDarkPalette := demo.Palette{
 }
 myLightPalette := demo.Palette{
 	Title:       []color.Attribute{color.FgBlue},
-	Description: []color.Attribute{color.FgBlue},
+	Description: []color.Attribute{color.FgHiBlue},
 	Command:     []color.Attribute{color.FgGreen},
 }
 

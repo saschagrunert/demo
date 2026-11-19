@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -98,6 +99,8 @@ const (
 	ThemeAuto = "auto"
 )
 
+var errInvalidTheme = errors.New("invalid theme")
+
 func createFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
@@ -124,7 +127,8 @@ func createFlags() []cli.Flag {
 			Name:        FlagTheme,
 			Value:       ThemeAuto,
 			DefaultText: ThemeAuto,
-			Usage:       "set output theme palette (`auto`, `dark` or `light`)",
+			Usage:       "set output theme palette (auto, dark or light)",
+			Validator:   validateTheme,
 		},
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,
@@ -385,11 +389,22 @@ func (d *Demo) RunE() error {
 
 func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 	opts := optionsFrom(ctx, cmd)
-	opts.Theme = cmd.String(FlagTheme)
 
-	if opts.Theme != ThemeAuto {
-		opts.Palette = d.paletteForTheme(opts.Theme)
+	resolvedTheme, err := normalizedTheme(opts.Theme)
+	if err != nil {
+		resolvedTheme = ThemeDark
 	}
+
+	if resolvedTheme == ThemeAuto {
+		if detectLightBackground() {
+			resolvedTheme = ThemeLight
+		} else {
+			resolvedTheme = ThemeDark
+		}
+	}
+
+	opts.Theme = resolvedTheme
+	opts.Palette = d.paletteForTheme(resolvedTheme)
 
 	initColorFunctions(&opts)
 
@@ -397,22 +412,28 @@ func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 }
 
 func (d *Demo) paletteForTheme(theme string) Palette {
-	selectedTheme := theme
-
-	if selectedTheme == "" {
-		selectedTheme = ThemeDark
-	}
-
-	if selectedTheme == ThemeAuto {
-		return Palette{}
-	}
-
-	switch selectedTheme {
-	case ThemeLight:
+	if strings.EqualFold(theme, ThemeLight) {
 		return d.palettes.light
-	case ThemeDark:
-		return d.palettes.dark
-	default:
-		return d.palettes.dark
 	}
+
+	return d.palettes.dark
+}
+
+func normalizedTheme(theme string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(theme)) {
+	case ThemeAuto:
+		return ThemeAuto, nil
+	case ThemeLight:
+		return ThemeLight, nil
+	case ThemeDark:
+		return ThemeDark, nil
+	default:
+		return "", fmt.Errorf("%w %q: allowed values are auto, dark, light", errInvalidTheme, theme)
+	}
+}
+
+func validateTheme(theme string) error {
+	_, err := normalizedTheme(theme)
+
+	return err
 }

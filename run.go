@@ -33,7 +33,10 @@ var (
 
 const ctrlC = 0x03
 
-const lightBackgroundThreshold = 7
+const (
+	lightBackgroundThreshold = 9
+	lightBackgroundIndex     = 7
+)
 
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
@@ -79,7 +82,7 @@ var (
 	//nolint:gochecknoglobals // exported defaults are part of the public API
 	LightPalette = Palette{
 		Title:       []color.Attribute{color.FgBlue},
-		Description: []color.Attribute{color.FgBlue},
+		Description: []color.Attribute{color.FgHiBlue},
 		Command:     []color.Attribute{color.FgGreen},
 	}
 )
@@ -159,8 +162,6 @@ func optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 		TypewriterSpeed:  cmd.Int(FlagTypewriterSpeed),
 	}
 
-	initColorFunctions(&opts)
-
 	return opts
 }
 
@@ -170,15 +171,12 @@ func initColorFunctions(opts *Options) {
 		opts.whiteSprintf = fmt.Sprintf
 		opts.greenSprintf = fmt.Sprintf
 	} else {
-		palette := opts.Palette
-		if palette.isZero() {
-			palette = defaultPalette(opts.Theme)
-		}
+		palette := mergePaletteWithDefaults(opts.Theme, opts.Palette)
 
 		opts.cyanSprintf = paletteSprintf(palette.Title, color.CyanString)
 		opts.whiteSprintf = paletteSprintf(
 			palette.Description,
-			color.New(color.FgWhite, color.Faint).SprintfFunc(),
+			color.New(color.Faint).SprintfFunc(),
 		)
 		opts.greenSprintf = paletteSprintf(palette.Command, color.GreenString)
 	}
@@ -199,6 +197,28 @@ func (p Palette) isZero() bool {
 	return len(p.Title) == 0 && len(p.Description) == 0 && len(p.Command) == 0
 }
 
+func mergePaletteWithDefaults(theme string, palette Palette) Palette {
+	if palette.isZero() {
+		return defaultPalette(theme)
+	}
+
+	defaults := defaultPalette(theme)
+
+	if len(palette.Title) == 0 {
+		palette.Title = defaults.Title
+	}
+
+	if len(palette.Description) == 0 {
+		palette.Description = defaults.Description
+	}
+
+	if len(palette.Command) == 0 {
+		palette.Command = defaults.Command
+	}
+
+	return palette
+}
+
 func defaultPalette(theme string) Palette {
 	switch strings.ToLower(theme) {
 	case ThemeAuto:
@@ -217,14 +237,7 @@ func defaultPalette(theme string) Palette {
 func detectLightBackground() bool {
 	colorFGBG := os.Getenv("COLORFGBG")
 	if colorFGBG == "" {
-		termProgram := strings.ToLower(os.Getenv("TERM_PROGRAM"))
-		if strings.Contains(termProgram, "apple_terminal") {
-			return true
-		}
-
-		colorTerm := strings.ToLower(os.Getenv("COLORTERM"))
-
-		return strings.Contains(colorTerm, "light") || strings.Contains(colorTerm, "bright")
+		return false
 	}
 
 	parts := strings.Split(colorFGBG, ";")
@@ -235,7 +248,7 @@ func detectLightBackground() bool {
 		return false
 	}
 
-	return bg >= lightBackgroundThreshold
+	return bg == lightBackgroundIndex || bg >= lightBackgroundThreshold
 }
 
 // S is a short-hand for converting string slice syntaxes.

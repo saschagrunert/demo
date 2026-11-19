@@ -40,6 +40,58 @@ func withArgs(args []string, fn func()) {
 	fn()
 }
 
+func withEnv(key, value string, fn func()) {
+	orig, existed := os.LookupEnv(key)
+
+	if value == "" {
+		Expect(os.Unsetenv(key)).To(Succeed())
+	} else {
+		Expect(os.Setenv(key, value)).To(Succeed())
+	}
+
+	defer func() {
+		if existed {
+			Expect(os.Setenv(key, orig)).To(Succeed())
+		} else {
+			Expect(os.Unsetenv(key)).To(Succeed())
+		}
+	}()
+
+	fn()
+}
+
+func runWithCustomPalettes(args []string) {
+	withArgs(args, func() {
+		origNoColor := color.NoColor
+		color.NoColor = false
+
+		defer func() { color.NoColor = origNoColor }()
+
+		run1 := demo.NewRun("Run 1", "desc")
+		out := &strings.Builder{}
+		Expect(run1.SetOutput(out)).To(Succeed())
+
+		sut := demo.New(
+			demo.WithPalettes(
+				demo.Palette{
+					Title:       []color.Attribute{color.FgRed},
+					Description: []color.Attribute{color.FgRed},
+					Command:     []color.Attribute{color.FgRed},
+				},
+				demo.Palette{
+					Title:       []color.Attribute{color.FgMagenta},
+					Description: []color.Attribute{color.FgMagenta},
+					Command:     []color.Attribute{color.FgMagenta},
+				},
+			),
+		)
+		sut.Add(run1, "run1", "first run")
+
+		Expect(sut.RunE()).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("\x1b[35m"))
+	})
+}
+
 var _ = Describe("Demo", func() {
 	It("should succeed to run", func() {
 		withArgs([]string{appName}, func() {
@@ -190,37 +242,43 @@ var _ = Describe("Demo", func() {
 		})
 	})
 
-	It("should run with paired palettes configured via New options", func() {
+	It("should fail when theme is invalid", func() {
 		withArgs([]string{
-			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
+			appName, run1Flag, "--theme=ligth", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
-			origNoColor := color.NoColor
-			color.NoColor = false
+			run1 := demo.NewRun("Run 1")
+			sut := demo.New()
+			sut.Add(run1, "run1", "first run")
 
-			defer func() { color.NoColor = origNoColor }()
+			err := sut.RunE()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid theme"))
+		})
+	})
 
-			run1 := demo.NewRun("Run 1", "desc")
-			out := &strings.Builder{}
-			Expect(run1.SetOutput(out)).To(Succeed())
-
-			sut := demo.New(
-				demo.WithPalettes(
-					demo.Palette{
-						Title:       []color.Attribute{color.FgRed},
-						Description: []color.Attribute{color.FgRed},
-						Command:     []color.Attribute{color.FgRed},
-					},
-					demo.Palette{
-						Title:       []color.Attribute{color.FgMagenta},
-						Description: []color.Attribute{color.FgMagenta},
-						Command:     []color.Attribute{color.FgMagenta},
-					},
-				),
-			)
+	It("should run with case-insensitive theme value", func() {
+		withArgs([]string{
+			appName, run1Flag, "--theme=LIGHT", autoFlag, autoTimeoutFlag, immediateFlag,
+		}, func() {
+			run1 := demo.NewRun("Run 1")
+			sut := demo.New()
 			sut.Add(run1, "run1", "first run")
 
 			Expect(sut.RunE()).To(Succeed())
-			Expect(out.String()).To(ContainSubstring("\x1b[35m"))
+		})
+	})
+
+	It("should run with paired palettes configured via New options", func() {
+		runWithCustomPalettes([]string{
+			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
+		})
+	})
+
+	It("should use custom palettes for auto theme with no explicit theme flag", func() {
+		withEnv("COLORFGBG", "15;7", func() {
+			runWithCustomPalettes([]string{
+				appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
+			})
 		})
 	})
 
