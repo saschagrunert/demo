@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -32,6 +33,11 @@ var (
 
 const ctrlC = 0x03
 
+const (
+	lightBackgroundThreshold = 9
+	lightBackgroundIndex     = 7
+)
+
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
 type Run struct {
@@ -54,6 +60,31 @@ type step struct {
 	dir                   string
 }
 
+// Palette defines the terminal color attributes used by a run.
+type Palette struct {
+	Title       []color.Attribute
+	Description []color.Attribute
+	Command     []color.Attribute
+}
+
+// DefaultDarkPalette returns the default palette for dark backgrounds.
+func DefaultDarkPalette() Palette {
+	return Palette{
+		Title:       []color.Attribute{color.FgCyan},
+		Description: []color.Attribute{color.FgWhite, color.Faint},
+		Command:     []color.Attribute{color.FgGreen},
+	}
+}
+
+// DefaultLightPalette returns the default high-contrast palette for light backgrounds.
+func DefaultLightPalette() Palette {
+	return Palette{
+		Title:       []color.Attribute{color.FgBlue},
+		Description: []color.Attribute{color.FgHiBlue},
+		Command:     []color.Attribute{color.FgGreen},
+	}
+}
+
 // Options specify the run options.
 type Options struct {
 	//nolint:containedctx // required to thread context through to subprocesses
@@ -74,6 +105,10 @@ type Options struct {
 	DryRun bool
 	// NoColor disables colored output.
 	NoColor bool
+	// Theme selects the active palette variant (for example "dark" or "light").
+	Theme string
+	// Palette overrides the selected theme palette when provided.
+	Palette Palette
 	// Immediate disables the typewriter animation and prints output instantly.
 	Immediate bool
 	// SkipSteps skips the first N steps in the run. Negative values are treated as 0.
@@ -118,13 +153,12 @@ func optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 		HideDescriptions: cmd.Bool(FlagHideDescriptions),
 		DryRun:           cmd.Bool(FlagDryRun),
 		NoColor:          noColor,
+		Theme:            cmd.String(FlagTheme),
 		Immediate:        cmd.Bool(FlagImmediate),
 		SkipSteps:        cmd.Int(FlagSkipSteps),
 		Shell:            cmd.String(FlagShell),
 		TypewriterSpeed:  cmd.Int(FlagTypewriterSpeed),
 	}
-
-	initColorFunctions(&opts)
 
 	return opts
 }
@@ -135,10 +169,78 @@ func initColorFunctions(opts *Options) {
 		opts.whiteSprintf = fmt.Sprintf
 		opts.greenSprintf = fmt.Sprintf
 	} else {
-		opts.cyanSprintf = color.CyanString
-		opts.whiteSprintf = color.New(color.FgWhite, color.Faint).SprintfFunc()
-		opts.greenSprintf = color.GreenString
+		palette := mergePaletteWithDefaults(opts.Theme, opts.Palette)
+
+		opts.cyanSprintf = paletteSprintf(palette.Title, color.CyanString)
+		opts.whiteSprintf = paletteSprintf(
+			palette.Description,
+			color.New(color.Faint).SprintfFunc(),
+		)
+		opts.greenSprintf = paletteSprintf(palette.Command, color.GreenString)
 	}
+}
+
+func paletteSprintf(
+	attrs []color.Attribute,
+	fallback func(format string, a ...any) string,
+) func(format string, a ...any) string {
+	if len(attrs) == 0 {
+		return fallback
+	}
+
+	return color.New(attrs...).SprintfFunc()
+}
+
+func (p Palette) isZero() bool {
+	return len(p.Title) == 0 && len(p.Description) == 0 && len(p.Command) == 0
+}
+
+func mergePaletteWithDefaults(theme string, palette Palette) Palette {
+	if palette.isZero() {
+		return defaultPalette(theme)
+	}
+
+	defaults := defaultPalette(theme)
+
+	if len(palette.Title) == 0 {
+		palette.Title = defaults.Title
+	}
+
+	if len(palette.Description) == 0 {
+		palette.Description = defaults.Description
+	}
+
+	if len(palette.Command) == 0 {
+		palette.Command = defaults.Command
+	}
+
+	return palette
+}
+
+func defaultPalette(theme string) Palette {
+	switch resolveTheme(theme) {
+	case ThemeLight:
+		return DefaultLightPalette()
+	default:
+		return DefaultDarkPalette()
+	}
+}
+
+func detectLightBackground() bool {
+	colorFGBG := os.Getenv("COLORFGBG")
+	if colorFGBG == "" {
+		return false
+	}
+
+	parts := strings.Split(colorFGBG, ";")
+	bgRaw := parts[len(parts)-1]
+
+	bg, err := strconv.Atoi(bgRaw)
+	if err != nil {
+		return false
+	}
+
+	return bg == lightBackgroundIndex || bg >= lightBackgroundThreshold
 }
 
 // S is a short-hand for converting string slice syntaxes.

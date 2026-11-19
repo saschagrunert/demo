@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,9 +23,13 @@ import (
 type Demo struct {
 	*cli.Command
 
-	runs    []*runFlag
-	setup   func(context.Context, *cli.Command) error
-	cleanup func(context.Context, *cli.Command) error
+	runs     []*runFlag
+	setup    func(context.Context, *cli.Command) error
+	cleanup  func(context.Context, *cli.Command) error
+	palettes struct {
+		dark  Palette
+		light Palette
+	}
 }
 
 type runFlag struct {
@@ -66,6 +71,9 @@ const (
 	// FlagNoColor true to print without colors, special characters for writing into file.
 	FlagNoColor = "no-color"
 
+	// FlagTheme allows selecting the output theme.
+	FlagTheme = "theme"
+
 	// FlagSkipSteps is the flag for skipping n amount of steps.
 	FlagSkipSteps = "skip-steps"
 
@@ -80,7 +88,18 @@ const (
 
 	// DefaultShell is the default shell used to execute commands.
 	DefaultShell = "bash"
+
+	// ThemeDark is the default theme for terminal backgrounds using dark colors.
+	ThemeDark = "dark"
+
+	// ThemeLight is the theme for terminal backgrounds using light colors.
+	ThemeLight = "light"
+
+	// ThemeAuto auto-detects the terminal background and picks a palette.
+	ThemeAuto = "auto"
 )
+
+var errInvalidTheme = errors.New("invalid theme")
 
 func createFlags() []cli.Flag {
 	return []cli.Flag{
@@ -103,6 +122,13 @@ func createFlags() []cli.Flag {
 		&cli.BoolFlag{
 			Name:  FlagNoColor,
 			Usage: "run the demo and output to be without colors",
+		},
+		&cli.StringFlag{
+			Name:        FlagTheme,
+			Value:       ThemeAuto,
+			DefaultText: ThemeAuto,
+			Usage:       "set output theme palette (auto, dark or light)",
+			Validator:   validateTheme,
 		},
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,
@@ -152,12 +178,24 @@ func createFlags() []cli.Flag {
 	}
 }
 
-func collectRunFunctions(cmd *cli.Command, runs []*runFlag) []runAction {
+func collectRunFunctions(
+	ctx context.Context,
+	cmd *cli.Command,
+	d *Demo,
+	runs []*runFlag,
+) []runAction {
 	runFns := make([]runAction, 0, len(runs))
+	opts := d.optionsFrom(ctx, cmd)
 
 	for _, x := range runs {
 		if isFlagSet(cmd, x.flag) || cmd.Bool(FlagAll) {
-			runFns = append(runFns, x.run.Run)
+			run := x.run
+
+			runFns = append(runFns, func(context.Context, *cli.Command) error {
+				runOpts := opts
+
+				return run.RunWithOptions(&runOpts)
+			})
 		}
 	}
 
@@ -220,8 +258,19 @@ func runContinuously(ctx context.Context, runSelected func() error) error {
 	}
 }
 
+// NewOption configures a demo created through New.
+type NewOption func(*Demo)
+
+// WithPalettes overrides both built-in palettes in one call.
+func WithPalettes(dark, light Palette) NewOption {
+	return func(d *Demo) {
+		d.palettes.dark = dark
+		d.palettes.light = light
+	}
+}
+
 // New creates a new Demo instance.
-func New() *Demo {
+func New(options ...NewOption) *Demo {
 	emptyFn := func(context.Context, *cli.Command) error { return nil }
 	demo := &Demo{
 		Command: ccli.NewCommand(),
@@ -229,12 +278,18 @@ func New() *Demo {
 		setup:   emptyFn,
 		cleanup: emptyFn,
 	}
+	demo.palettes.dark = DefaultDarkPalette()
+	demo.palettes.light = DefaultLightPalette()
+
+	for _, option := range options {
+		option(demo)
+	}
 
 	demo.Flags = createFlags()
 	demo.UseShortOptionHandling = true
 
 	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
-		runFns := collectRunFunctions(cmd, demo.runs)
+		runFns := collectRunFunctions(ctx, cmd, demo, demo.runs)
 		runSelected := createRunSelected(demo, ctx, cmd, runFns)
 
 		if cmd.Bool(FlagContinuously) {
@@ -330,4 +385,60 @@ func (d *Demo) RunE() error {
 	}
 
 	return nil
+}
+
+func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
+	opts := optionsFrom(ctx, cmd)
+	resolvedTheme := resolveTheme(opts.Theme)
+
+	opts.Theme = resolvedTheme
+	opts.Palette = d.paletteForTheme(resolvedTheme)
+
+	initColorFunctions(&opts)
+
+	return opts
+}
+
+func (d *Demo) paletteForTheme(theme string) Palette {
+	if theme == ThemeLight {
+		return d.palettes.light
+	}
+
+	return d.palettes.dark
+}
+
+func resolveTheme(theme string) string {
+	normalized, err := normalizedTheme(theme)
+	if err != nil {
+		return ThemeDark
+	}
+
+	if normalized == ThemeAuto {
+		if detectLightBackground() {
+			return ThemeLight
+		}
+
+		return ThemeDark
+	}
+
+	return normalized
+}
+
+func normalizedTheme(theme string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(theme)) {
+	case ThemeAuto:
+		return ThemeAuto, nil
+	case ThemeLight:
+		return ThemeLight, nil
+	case ThemeDark:
+		return ThemeDark, nil
+	default:
+		return "", fmt.Errorf("%w %q: allowed values are auto, dark, light", errInvalidTheme, theme)
+	}
+}
+
+func validateTheme(theme string) error {
+	_, err := normalizedTheme(theme)
+
+	return err
 }
