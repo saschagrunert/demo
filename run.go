@@ -33,6 +33,8 @@ var (
 
 const ctrlC = 0x03
 
+const lightBackgroundThreshold = 7
+
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
 type Run struct {
@@ -64,6 +66,8 @@ type Palette struct {
 
 var (
 	// DarkPalette is the default high-contrast palette for dark backgrounds.
+	//
+	//nolint:gochecknoglobals // exported defaults are part of the public API
 	DarkPalette = Palette{
 		Title:       []color.Attribute{color.FgCyan},
 		Description: []color.Attribute{color.FgHiCyan},
@@ -71,6 +75,8 @@ var (
 	}
 
 	// LightPalette is the default high-contrast palette for light backgrounds.
+	//
+	//nolint:gochecknoglobals // exported defaults are part of the public API
 	LightPalette = Palette{
 		Title:       []color.Attribute{color.FgBlue},
 		Description: []color.Attribute{color.FgBlue},
@@ -199,6 +205,7 @@ func defaultPalette(theme string) Palette {
 		if detectLightBackground() {
 			return LightPalette
 		}
+
 		return DarkPalette
 	case ThemeLight:
 		return LightPalette
@@ -216,17 +223,19 @@ func detectLightBackground() bool {
 		}
 
 		colorTerm := strings.ToLower(os.Getenv("COLORTERM"))
+
 		return strings.Contains(colorTerm, "light") || strings.Contains(colorTerm, "bright")
 	}
 
 	parts := strings.Split(colorFGBG, ";")
 	bgRaw := parts[len(parts)-1]
+
 	bg, err := strconv.Atoi(bgRaw)
 	if err != nil {
 		return false
 	}
 
-	return bg >= 7
+	return bg >= lightBackgroundThreshold
 }
 
 // S is a short-hand for converting string slice syntaxes.

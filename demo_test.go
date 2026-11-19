@@ -23,6 +23,7 @@ const (
 	autoFlag        = "--auto"
 	autoTimeoutFlag = "--auto-timeout=0"
 	immediateFlag   = "--immediate"
+	run1Flag        = "--run1"
 )
 
 func withArgs(args []string, fn func()) {
@@ -125,7 +126,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run selected demo by name alias", func() {
 		withArgs([]string{
-			appName, "--run1", autoFlag, autoTimeoutFlag, immediateFlag,
+			appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			run2 := demo.NewRun("Run 2")
@@ -167,7 +168,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run with light theme", func() {
 		withArgs([]string{
-			appName, "--run1", "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
+			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			sut := demo.New()
@@ -179,7 +180,7 @@ var _ = Describe("Demo", func() {
 
 	It("should run with auto theme", func() {
 		withArgs([]string{
-			appName, "--run1", "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
+			appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			run1 := demo.NewRun("Run 1")
 			sut := demo.New()
@@ -191,10 +192,11 @@ var _ = Describe("Demo", func() {
 
 	It("should run with paired palettes configured via New options", func() {
 		withArgs([]string{
-			appName, "--run1", "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
+			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
 		}, func() {
 			origNoColor := color.NoColor
 			color.NoColor = false
+
 			defer func() { color.NoColor = origNoColor }()
 
 			run1 := demo.NewRun("Run 1", "desc")

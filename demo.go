@@ -186,6 +186,7 @@ func collectRunFunctions(
 	for _, x := range runs {
 		if isFlagSet(cmd, x.flag) || cmd.Bool(FlagAll) {
 			run := x.run
+
 			runFns = append(runFns, func(context.Context, *cli.Command) error {
 				runOpts := opts
 
@@ -297,36 +298,6 @@ func New(options ...NewOption) *Demo {
 	return demo
 }
 
-func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
-	opts := optionsFrom(ctx, cmd)
-	opts.Theme = cmd.String(FlagTheme)
-	if opts.Theme != ThemeAuto {
-		opts.Palette = d.paletteForTheme(opts.Theme)
-	}
-	initColorFunctions(&opts)
-
-	return opts
-}
-
-func (d *Demo) paletteForTheme(theme string) Palette {
-	selectedTheme := theme
-	if selectedTheme == "" {
-		selectedTheme = ThemeDark
-	}
-	if selectedTheme == ThemeAuto {
-		return Palette{}
-	}
-
-	switch selectedTheme {
-	case ThemeLight:
-		return d.palettes.light
-	case ThemeDark:
-		return d.palettes.dark
-	default:
-		return d.palettes.dark
-	}
-}
-
 // Setup sets the setup function called before each run.
 func (d *Demo) Setup(setupFn func(context.Context, *cli.Command) error) {
 	d.setup = setupFn
@@ -410,4 +381,38 @@ func (d *Demo) RunE() error {
 	}
 
 	return nil
+}
+
+func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
+	opts := optionsFrom(ctx, cmd)
+	opts.Theme = cmd.String(FlagTheme)
+
+	if opts.Theme != ThemeAuto {
+		opts.Palette = d.paletteForTheme(opts.Theme)
+	}
+
+	initColorFunctions(&opts)
+
+	return opts
+}
+
+func (d *Demo) paletteForTheme(theme string) Palette {
+	selectedTheme := theme
+
+	if selectedTheme == "" {
+		selectedTheme = ThemeDark
+	}
+
+	if selectedTheme == ThemeAuto {
+		return Palette{}
+	}
+
+	switch selectedTheme {
+	case ThemeLight:
+		return d.palettes.light
+	case ThemeDark:
+		return d.palettes.dark
+	default:
+		return d.palettes.dark
+	}
 }
