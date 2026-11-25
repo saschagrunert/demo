@@ -179,20 +179,18 @@ func createFlags() []cli.Flag {
 }
 
 func collectRunFunctions(
-	ctx context.Context,
 	cmd *cli.Command,
 	d *Demo,
 	runs []*runFlag,
 ) []runAction {
 	runFns := make([]runAction, 0, len(runs))
-	opts := d.optionsFrom(ctx, cmd)
 
 	for _, x := range runs {
 		if isFlagSet(cmd, x.flag) || cmd.Bool(FlagAll) {
 			run := x.run
 
-			runFns = append(runFns, func(context.Context, *cli.Command) error {
-				runOpts := opts
+			runFns = append(runFns, func(ctx context.Context, cmd *cli.Command) error {
+				runOpts := d.optionsFrom(ctx, cmd)
 
 				return run.RunWithOptions(&runOpts)
 			})
@@ -289,7 +287,7 @@ func New(options ...NewOption) *Demo {
 	demo.UseShortOptionHandling = true
 
 	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
-		runFns := collectRunFunctions(ctx, cmd, demo, demo.runs)
+		runFns := collectRunFunctions(cmd, demo, demo.runs)
 		runSelected := createRunSelected(demo, ctx, cmd, runFns)
 
 		if cmd.Bool(FlagContinuously) {

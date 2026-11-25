@@ -251,6 +251,43 @@ var _ = Describe("Demo", func() {
 		})
 	})
 
+	DescribeTable("should detect only light ANSI backgrounds",
+		func(background, expectedColor string) {
+			withEnv("COLORFGBG", "15;"+background, func() {
+				runWithExpectedTitleColor([]string{
+					appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
+				}, expectedColor)
+			})
+		},
+		Entry("bright ANSI background", "15", "\x1b[34m"),
+		Entry("first extended palette index", "16", "\x1b[36m"),
+		Entry("near-black extended palette index", "234", "\x1b[36m"),
+	)
+
+	It("should read run options after setup", func() {
+		withArgs([]string{
+			appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
+		}, func() {
+			origNoColor := color.NoColor
+			color.NoColor = false
+
+			defer func() { color.NoColor = origNoColor }()
+
+			run := demo.NewRun("Run 1")
+			out := &strings.Builder{}
+			Expect(run.SetOutput(out)).To(Succeed())
+
+			sut := demo.New()
+			sut.Add(run, "run1", "first run")
+			sut.Setup(func(_ context.Context, cmd *cli.Command) error {
+				return cmd.Set(demo.FlagTheme, demo.ThemeLight)
+			})
+
+			Expect(sut.RunE()).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("\x1b[34m"))
+		})
+	})
+
 	It("should fail when theme is invalid", func() {
 		withArgs([]string{
 			appName, run1Flag, "--theme=ligth", autoFlag, autoTimeoutFlag, immediateFlag,

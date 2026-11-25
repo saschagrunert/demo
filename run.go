@@ -35,6 +35,7 @@ const ctrlC = 0x03
 
 const (
 	lightBackgroundThreshold = 9
+	lightBackgroundMaximum   = 15
 	lightBackgroundIndex     = 7
 )
 
@@ -171,35 +172,13 @@ func initColorFunctions(opts *Options) {
 	} else {
 		palette := mergePaletteWithDefaults(opts.Theme, opts.Palette)
 
-		opts.cyanSprintf = paletteSprintf(palette.Title, color.CyanString)
-		opts.whiteSprintf = paletteSprintf(
-			palette.Description,
-			color.New(color.Faint).SprintfFunc(),
-		)
-		opts.greenSprintf = paletteSprintf(palette.Command, color.GreenString)
+		opts.cyanSprintf = color.New(palette.Title...).SprintfFunc()
+		opts.whiteSprintf = color.New(palette.Description...).SprintfFunc()
+		opts.greenSprintf = color.New(palette.Command...).SprintfFunc()
 	}
-}
-
-func paletteSprintf(
-	attrs []color.Attribute,
-	fallback func(format string, a ...any) string,
-) func(format string, a ...any) string {
-	if len(attrs) == 0 {
-		return fallback
-	}
-
-	return color.New(attrs...).SprintfFunc()
-}
-
-func (p Palette) isZero() bool {
-	return len(p.Title) == 0 && len(p.Description) == 0 && len(p.Command) == 0
 }
 
 func mergePaletteWithDefaults(theme string, palette Palette) Palette {
-	if palette.isZero() {
-		return defaultPalette(theme)
-	}
-
 	defaults := defaultPalette(theme)
 
 	if len(palette.Title) == 0 {
@@ -240,7 +219,8 @@ func detectLightBackground() bool {
 		return false
 	}
 
-	return bg == lightBackgroundIndex || bg >= lightBackgroundThreshold
+	return bg == lightBackgroundIndex ||
+		(bg >= lightBackgroundThreshold && bg <= lightBackgroundMaximum)
 }
 
 // S is a short-hand for converting string slice syntaxes.
