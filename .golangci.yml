@@ -139,6 +139,12 @@ linters:
       branch-max-lines: 2
   exclusions:
     generated: lax
+    rules:
+      # Options.Context is threaded through to the step commands.
+      - path: ^run\.go$
+        source: ^\s*Context\s+context\.Context$
+        linters:
+          - containedctx
     presets:
       - comments
       - common-false-positives

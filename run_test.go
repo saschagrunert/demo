@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/saschagrunert/demo"
@@ -159,13 +160,13 @@ var _ = Describe("Run", func() {
 		setupCalled := false
 		cleanupCalled := false
 
-		sut.Setup(func() error {
+		sut.Setup(func(context.Context) error {
 			setupCalled = true
 
 			return nil
 		})
 
-		sut.Cleanup(func() error {
+		sut.Cleanup(func(context.Context) error {
 			cleanupCalled = true
 
 			return nil
@@ -308,23 +309,32 @@ var _ = Describe("Run", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should fail when setup returns error", func() {
+	It("should fail when setup returns error and still clean up", func() {
 		// Given
-		sut.Setup(func() error {
+		cleanedUp := false
+
+		sut.Setup(func(context.Context) error {
 			return errSetupFailed
 		})
+		sut.Cleanup(func(context.Context) error {
+			cleanedUp = true
+
+			return nil
+		})
+		sut.Step(demo.S("Not executed"), demo.S("echo step"))
 
 		// When
 		err := sut.RunWithOptions(&opts)
 
 		// Then
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("setup failed"))
+		Expect(err).To(MatchError(errSetupFailed))
+		Expect(cleanedUp).To(BeTrue())
+		Expect(out.String()).ToNot(ContainSubstring("Not executed"))
 	})
 
 	It("should fail when cleanup returns error", func() {
 		// Given
-		sut.Cleanup(func() error {
+		sut.Cleanup(func(context.Context) error {
 			return errCleanupFailed
 		})
 
@@ -611,7 +621,7 @@ var _ = Describe("Run", func() {
 
 	It("should return both errors when run and cleanup fail", func() {
 		sut.Step(demo.S("Failing step"), demo.S("exit 1"))
-		sut.Cleanup(func() error {
+		sut.Cleanup(func(context.Context) error {
 			return errCleanupFailed
 		})
 
@@ -638,7 +648,7 @@ var _ = Describe("Run", func() {
 	It("should call cleanup even when a step fails", func() {
 		cleanupCalled := false
 
-		sut.Cleanup(func() error {
+		sut.Cleanup(func(context.Context) error {
 			cleanupCalled = true
 
 			return nil
@@ -847,6 +857,104 @@ var _ = Describe("Run", func() {
 		// Then
 		Expect(err).ToNot(HaveOccurred())
 		Expect(out.String()).To(ContainSubstring("got=hello\n"))
+	})
+
+	It("should not modify reused options", func() {
+		// Given
+		origNoColor := color.NoColor
+		color.NoColor = false
+
+		defer func() { color.NoColor = origNoColor }()
+
+		reused := demo.Options{Auto: true, Immediate: true}
+		Expect(sut.RunWithOptions(&reused)).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("\x1b["))
+		Expect(reused).To(Equal(demo.Options{Auto: true, Immediate: true}))
+
+		out.Reset()
+
+		reused.NoColor = true
+
+		// When
+		err := sut.RunWithOptions(&reused)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).ToNot(ContainSubstring("\x1b["))
+	})
+
+	It("should run with nil options", func() {
+		// Given
+		run := demo.NewRun("Nil options")
+		Expect(run.SetOutput(out)).To(Succeed())
+
+		// When
+		err := run.RunWithOptions(nil)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("Nil options"))
+	})
+
+	It("should fail with an invalid theme", func() {
+		// Given
+		opts.Theme = "bogus"
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).To(MatchError(ContainSubstring(`invalid theme "bogus"`)))
+	})
+
+	It("should pass the run context to setup and cleanup", func() {
+		// Given
+		type ctxKey struct{}
+
+		ctx := context.WithValue(context.Background(), ctxKey{}, "value")
+
+		var setupValue, cleanupValue any
+
+		sut.Setup(func(ctx context.Context) error {
+			setupValue = ctx.Value(ctxKey{})
+
+			return nil
+		})
+		sut.Cleanup(func(ctx context.Context) error {
+			cleanupValue = ctx.Value(ctxKey{})
+
+			return nil
+		})
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Auto: true, Immediate: true, Context: ctx})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(setupValue).To(Equal("value"))
+		Expect(cleanupValue).To(Equal("value"))
+	})
+
+	It("should run the cleanup with a usable context when interrupted", func() {
+		// Given
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		var cleanupErr error
+
+		sut.Step(nil, demo.S("sleep 10"))
+		sut.Cleanup(func(ctx context.Context) error {
+			cleanupErr = demo.EnsureWithContext(ctx, "true")
+
+			return nil
+		})
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Auto: true, Immediate: true, Context: ctx})
+
+		// Then
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+		Expect(cleanupErr).ToNot(HaveOccurred())
 	})
 })
 
