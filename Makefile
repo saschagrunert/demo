@@ -65,6 +65,16 @@ test: ## Run tests with coverage.
 		--succinct
 	$(GO) tool cover -html=$(COVERAGE_PATH)/coverprofile -o $(COVERAGE_PATH)/coverage.html
 
+##@ Documentation:
+
+.PHONY: demo-svg
+demo-svg: ## Record the README demo into .github/demo.svg (requires python3 and npx).
+	$(GO) build -o $(BUILD_PATH)/demo ./cmd
+	python3 .github/record-demo.py $(BUILD_PATH)/demo.cast \
+		$(BUILD_PATH)/demo --demo-0 --auto --theme=dark
+	npx -y svg-term-cli@2.1.1 --in $(BUILD_PATH)/demo.cast \
+		--out .github/demo.svg --width 90 --height 20
+
 ##@ Linting:
 
 ${GOLANGCI_LINT}:

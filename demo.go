@@ -44,22 +44,22 @@ const (
 	// FlagAuto is the flag for running in automatic mode.
 	FlagAuto = "auto"
 
-	// FlagAutoTimeout is the flag for the timeout to be waited when `auto` is
-	// enabled.
+	// FlagAutoTimeout is the flag for the time to wait between steps in
+	// automatic mode.
 	FlagAutoTimeout = "auto-timeout"
 
-	// FlagBreakPoint is the flag for doing `auto` but with breakpoint.
+	// FlagBreakPoint is the flag for pausing at breakpoint steps.
 	FlagBreakPoint = "with-breakpoints"
 
-	// FlagContinueOnError is the flag for steps continue running if
-	// there is an error.
+	// FlagContinueOnError is the flag for continuing if a step fails.
 	FlagContinueOnError = "continue-on-error"
 
 	// FlagContinuously is the flag for running the demos continuously without
 	// any end.
 	FlagContinuously = "continuously"
 
-	// FlagDryRun only prints the command in the stdout.
+	// FlagDryRun is the flag for only printing the commands without executing
+	// them.
 	FlagDryRun = "dry-run"
 
 	// FlagHideDescriptions is the flag for hiding the descriptions.
@@ -68,7 +68,7 @@ const (
 	// FlagImmediate is the flag for disabling the text animations.
 	FlagImmediate = "immediate"
 
-	// FlagNoColor true to print without colors, special characters for writing into file.
+	// FlagNoColor is the flag for disabling colored output.
 	FlagNoColor = "no-color"
 
 	// FlagTheme allows selecting the output theme.
@@ -117,11 +117,11 @@ func createFlags() []cli.Flag {
 		&cli.BoolFlag{
 			Name:  FlagDryRun,
 			Value: false,
-			Usage: "run the demo and only prints the commands",
+			Usage: "only print the commands without executing them",
 		},
 		&cli.BoolFlag{
 			Name:  FlagNoColor,
-			Usage: "run the demo and output to be without colors",
+			Usage: "disable colored output",
 		},
 		&cli.StringFlag{
 			Name:        FlagTheme,
@@ -133,16 +133,16 @@ func createFlags() []cli.Flag {
 		&cli.DurationFlag{
 			Name:    FlagAutoTimeout,
 			Aliases: []string{"t"},
-			Usage:   "the timeout to be waited when `auto` is enabled",
+			Usage:   "time to wait between steps in auto mode",
 			Value:   1 * time.Second,
 		},
 		&cli.BoolFlag{
 			Name:  FlagBreakPoint,
-			Usage: "breakpoint",
+			Usage: "pause at breakpoint steps",
 		},
 		&cli.BoolFlag{
 			Name:  FlagContinueOnError,
-			Usage: "continue if there a step fails",
+			Usage: "continue if a step fails",
 		},
 		&cli.BoolFlag{
 			Name:    FlagContinuously,

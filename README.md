@@ -45,21 +45,21 @@ USAGE:
    main [global options]
 
 GLOBAL OPTIONS:
-   --all, -l                     run all demos
-   --auto, -a                    run the demo in automatic mode, where every step gets executed automatically
-   --dry-run                     run the demo and only prints the commands
-   --no-color                    run the demo and output to be without colors
-   --theme string                set output theme palette (auto, dark or light) (default: auto)
-   --auto-timeout auto, -t auto  the timeout to be waited when auto is enabled (default: 1s)
-   --with-breakpoints            breakpoint
-   --continue-on-error           continue if there a step fails
-   --continuously, -c            run the demos continuously without any end
-   --hide-descriptions, -d       hide descriptions between the steps
-   --immediate, -i               immediately output without the typewriter animation
-   --skip-steps int, -s int      skip the amount of initial steps within the demo (default: 0)
-   --shell string                define the shell that is used to execute the command(s) (default: bash)
-   --typewriter-speed int        maximum milliseconds per character for typewriter animation (default: 40)
-   --help, -h                    show help
+   --all, -l                             run all demos
+   --auto, -a                            run the demo in automatic mode, where every step gets executed automatically
+   --dry-run                             only print the commands without executing them
+   --no-color                            disable colored output
+   --theme string                        set output theme palette (auto, dark or light) (default: auto)
+   --auto-timeout duration, -t duration  time to wait between steps in auto mode (default: 1s)
+   --with-breakpoints                    pause at breakpoint steps
+   --continue-on-error                   continue if a step fails
+   --continuously, -c                    run the demos continuously without any end
+   --hide-descriptions, -d               hide descriptions between the steps
+   --immediate, -i                       immediately output without the typewriter animation
+   --skip-steps int, -s int              skip the amount of initial steps within the demo (default: 0)
+   --shell string                        define the shell that is used to execute the command(s) (default: bash)
+   --typewriter-speed int                maximum milliseconds per character for typewriter animation (default: 40)
+   --help, -h                            show help
 ```
 
 The application is based on the [urfave/cli](https://github.com/urfave/cli)

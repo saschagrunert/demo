@@ -360,6 +360,11 @@ func (r *Run) executeSteps() error {
 		return err
 	}
 
+	// Chdir steps only apply to the current execution, so restore the
+	// configured working directory for the next one.
+	workDir := r.dir
+	defer func() { r.dir = workDir }()
+
 	visibleSteps := r.countVisibleSteps()
 	current := 0
 
