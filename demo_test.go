@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -13,14 +12,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
+	"github.com/onsi/gomega/types"
 	"github.com/saschagrunert/demo"
 	"github.com/urfave/cli/v3"
 )
-
-// osArgsMu protects os.Args from concurrent test access.
-//
-//nolint:gochecknoglobals // required for test synchronization
-var osArgsMu sync.Mutex
 
 const (
 	appName         = "demo"
@@ -28,326 +23,310 @@ const (
 	autoTimeoutFlag = "--auto-timeout=0"
 	immediateFlag   = "--immediate"
 	run1Flag        = "--run1"
+	run2Flag        = "--run2"
+	allFlag         = "--all"
+
+	blueTitle    = "\x1b[34m"
+	cyanTitle    = "\x1b[36m"
+	magentaTitle = "\x1b[35m"
 )
 
-func withArgs(args []string, fn func()) {
-	osArgsMu.Lock()
+// newTestRun creates a run that writes into the returned builder.
+func newTestRun(title string, description ...string) (*demo.Run, *strings.Builder) {
+	run := demo.NewRun(title, description...)
+	out := &strings.Builder{}
+	Expect(run.SetOutput(out)).To(Succeed())
 
-	defer osArgsMu.Unlock()
-
-	orig := os.Args
-
-	defer func() { os.Args = orig }()
-
-	os.Args = args
-
-	fn()
+	return run, out
 }
 
-// withColorFGBG sets the COLORFGBG environment variable for the current spec.
-func withColorFGBG(value string, fn func()) {
-	GinkgoT().Setenv("COLORFGBG", value)
-	fn()
+// newTestDemo creates a demo that writes its help and errors to the
+// GinkgoWriter.
+func newTestDemo(options ...demo.Option) *demo.Demo {
+	sut := demo.New(options...)
+	sut.Writer = GinkgoWriter
+	sut.ErrWriter = GinkgoWriter
+
+	return sut
 }
 
-func runWithCustomPalettes(args []string) {
-	withArgs(args, func() {
-		origNoColor := color.NoColor
-		color.NoColor = false
+// runDemo runs the demo with the provided flags and without any delays.
+func runDemo(sut *demo.Demo, flags ...string) error {
+	args := append([]string{appName, autoFlag, autoTimeoutFlag, immediateFlag}, flags...)
 
-		defer func() { color.NoColor = origNoColor }()
-
-		run1 := demo.NewRun("Run 1", "desc")
-		out := &strings.Builder{}
-		Expect(run1.SetOutput(out)).To(Succeed())
-
-		sut := demo.New(
-			demo.WithPalettes(
-				demo.Palette{
-					Title:       []color.Attribute{color.FgRed},
-					Description: []color.Attribute{color.FgRed},
-					Command:     []color.Attribute{color.FgRed},
-				},
-				demo.Palette{
-					Title:       []color.Attribute{color.FgMagenta},
-					Description: []color.Attribute{color.FgMagenta},
-					Command:     []color.Attribute{color.FgMagenta},
-				},
-			),
-		)
-		sut.Add(run1, "run1", "first run")
-
-		Expect(sut.RunE()).To(Succeed())
-		Expect(out.String()).To(ContainSubstring("\x1b[35m"))
-	})
+	return sut.RunContext(context.Background(), args) //nolint:wrapcheck // test helper
 }
 
-func runWithExpectedTitleColor(args []string, expectedColorCode string) {
-	withArgs(args, func() {
-		origNoColor := color.NoColor
-		color.NoColor = false
+// enableColor enables colored output for the current spec.
+func enableColor() {
+	orig := color.NoColor
+	color.NoColor = false
 
-		defer func() { color.NoColor = origNoColor }()
+	DeferCleanup(func() { color.NoColor = orig })
+}
 
-		run1 := demo.NewRun("Run 1")
-		out := &strings.Builder{}
-		Expect(run1.SetOutput(out)).To(Succeed())
+// expectTitleColor runs a demo with a single run and checks the title color.
+func expectTitleColor(expected string, flags ...string) {
+	enableColor()
 
-		sut := demo.New()
-		sut.Add(run1, "run1", "first run")
+	run, out := newTestRun("Run 1")
+	sut := newTestDemo()
+	sut.Add(run, "run1", "first run")
 
-		Expect(sut.RunE()).To(Succeed())
-		Expect(out.String()).To(ContainSubstring(expectedColorCode))
-	})
+	Expect(runDemo(sut, append(flags, run1Flag)...)).To(Succeed())
+	Expect(out.String()).To(HavePrefix(expected + "Run 1"))
+}
+
+// expectCustomPalette runs a demo with custom palettes and checks that the
+// light palette is used.
+func expectCustomPalette(flags ...string) {
+	enableColor()
+
+	run, out := newTestRun("Run 1", "desc")
+	sut := newTestDemo(demo.WithPalettes(
+		demo.Palette{Title: []color.Attribute{color.FgRed}},
+		demo.Palette{Title: []color.Attribute{color.FgMagenta}},
+	))
+	sut.Add(run, "run1", "first run")
+
+	Expect(runDemo(sut, append(flags, run1Flag)...)).To(Succeed())
+	Expect(out.String()).To(HavePrefix(magentaTitle + "Run 1"))
+	// The description falls back to the default light palette.
+	Expect(out.String()).To(ContainSubstring("\x1b[94mdesc"))
 }
 
 var _ = Describe("Demo", func() {
-	It("should succeed to run", func() {
-		withArgs([]string{appName}, func() {
-			sut := demo.New()
-			Expect(sut.RunE()).To(Succeed())
+	DescribeTable("should show the help if no run is selected",
+		func(flags ...string) {
+			out := &strings.Builder{}
+			run, runOut := newTestRun("Run 1")
+			sut := newTestDemo()
+			sut.Writer = out
+			sut.Add(run, "run1", "first run")
+
+			Expect(runDemo(sut, flags...)).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("GLOBAL OPTIONS"))
+			Expect(runOut.String()).To(BeEmpty())
+		},
+		Entry("without flags"),
+		Entry("in continuous mode", "--continuously"),
+	)
+
+	It("should run the example with setup and cleanup", func() {
+		run, out := newTestRun("Title", "Some additional", "multiline description")
+		run.Step(demo.S("This is a possible", "description"), demo.S("echo hello world"))
+		run.Step(nil, demo.S("echo without", "description"))
+		run.Step(demo.S("Just a description without a command"), nil)
+
+		var calls []string
+
+		sut := newTestDemo()
+		sut.Add(run, "title", "description")
+		sut.Setup(func(context.Context, *cli.Command) error {
+			calls = append(calls, "setup")
+
+			return nil
 		})
+		sut.Cleanup(func(context.Context, *cli.Command) error {
+			calls = append(calls, "cleanup")
+
+			return nil
+		})
+
+		Expect(runDemo(sut, "--title")).To(Succeed())
+		Expect(calls).To(Equal([]string{"setup", "cleanup"}))
+		Expect(out.String()).To(ContainSubstring("Some additional\nmultiline description\n"))
+		Expect(out.String()).To(ContainSubstring("# description [1/3]:"))
+		Expect(out.String()).To(ContainSubstring("> echo hello world\nhello world\n"))
+		Expect(out.String()).To(ContainSubstring("without description\n"))
+		Expect(out.String()).To(ContainSubstring("# Just a description without a command [3/3]"))
 	})
 
-	It("should succeed to run with example", func() {
-		withArgs([]string{
-			appName, autoFlag, autoTimeoutFlag, immediateFlag, "--title",
-		}, func() {
-			example := func() *demo.Run {
-				r := demo.NewRun(
-					"Title",
-					"Some additional",
-					"multiline description",
-				)
+	It("should run all runs in order with --all", func() {
+		out := &strings.Builder{}
+		run1 := demo.NewRun("Run 1")
+		run2 := demo.NewRun("Run 2")
 
-				r.Step(demo.S(
-					"This is a possible",
-					"description of the command",
-					"to be executed",
-				), demo.S("echo hello world"))
+		Expect(run1.SetOutput(out)).To(Succeed())
+		Expect(run2.SetOutput(out)).To(Succeed())
 
-				r.Step(nil, demo.S("echo without description"))
-				r.Step(demo.S("Just a description without a command"), nil)
+		sut := newTestDemo()
+		sut.Add(run1, "run1", "first run")
+		sut.Add(run2, "run2", "second run")
 
-				return r
+		Expect(runDemo(sut, allFlag)).To(Succeed())
+		Expect(out.String()).To(MatchRegexp(`(?s)Run 1.*Run 2`))
+	})
+
+	DescribeTable("should run only the selected runs",
+		func(flags []string, run1Matcher, run2Matcher types.GomegaMatcher) {
+			run1, out1 := newTestRun("Run 1")
+			run2, out2 := newTestRun("Run 2")
+
+			sut := newTestDemo()
+			sut.Add(run1, "run1", "first run")
+			sut.Add(run2, "run2", "second run")
+
+			Expect(sut.RunContext(context.Background(), append([]string{appName}, flags...))).
+				To(Succeed())
+			Expect(out1.String()).To(run1Matcher)
+			Expect(out2.String()).To(run2Matcher)
+		},
+		Entry(
+			"by flag",
+			[]string{
+				run2Flag,
+				autoFlag,
+				autoTimeoutFlag,
+				immediateFlag,
+			},
+			BeEmpty(),
+			HavePrefix("Run 2"),
+		),
+		Entry("with short options",
+			[]string{"-a", "-i", "-t=0", run1Flag}, HavePrefix("Run 1"), BeEmpty()),
+		Entry(
+			"with all short flags",
+			[]string{
+				"-l",
+				"-a",
+				"-t=0",
+				"-i",
+				"-d",
+				"-s=0",
+			},
+			HavePrefix("Run 1"),
+			HavePrefix("Run 2"),
+		),
+	)
+
+	It("should hide descriptions with the short flag", func() {
+		run, out := newTestRun("Run 1", "hidden description")
+		run.Step(demo.S("hidden step"), demo.S("echo $((40 + 2))"))
+
+		sut := newTestDemo()
+		sut.Add(run, "run1", "first run")
+
+		Expect(runDemo(sut, "-d", run1Flag)).To(Succeed())
+		Expect(out.String()).ToNot(ContainSubstring("hidden"))
+		Expect(out.String()).To(ContainSubstring("> echo $((40 + 2))\n42\n"))
+	})
+
+	It("should run setup and cleanup for every run", func() {
+		sut := newTestDemo()
+
+		for _, name := range []string{"run1", "run2", "run3"} {
+			run, _ := newTestRun(name)
+			sut.Add(run, name, name)
+		}
+
+		setups, cleanups := 0, 0
+
+		sut.Setup(func(context.Context, *cli.Command) error {
+			setups++
+
+			return nil
+		})
+		sut.Cleanup(func(context.Context, *cli.Command) error {
+			cleanups++
+
+			return nil
+		})
+
+		Expect(runDemo(sut, allFlag)).To(Succeed())
+		Expect(setups).To(Equal(3))
+		Expect(cleanups).To(Equal(3))
+	})
+
+	It("should repeat the runs in continuous mode until cancelled", func() {
+		run, out := newTestRun("Run 1")
+		ctx, cancel := context.WithCancel(context.Background())
+
+		defer cancel()
+
+		iterations := 0
+		sut := newTestDemo()
+		sut.Add(run, "run1", "first run")
+		sut.Setup(func(context.Context, *cli.Command) error {
+			iterations++
+			if iterations == 3 {
+				cancel()
 			}
-			sut := demo.New()
-			sut.Add(example(), "title", "description")
 
-			type success struct{ setup, cleanup bool }
-
-			succeed := &success{}
-
-			sut.Setup(func(context.Context, *cli.Command) error {
-				succeed.setup = true
-
-				return nil
-			})
-			sut.Cleanup(func(context.Context, *cli.Command) error {
-				succeed.cleanup = true
-
-				return nil
-			})
-
-			Expect(sut.RunE()).To(Succeed())
-			Expect(succeed.setup).To(BeTrue())
-			Expect(succeed.cleanup).To(BeTrue())
+			return nil
 		})
+
+		err := sut.RunContext(ctx, []string{
+			appName, "--continuously", run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
+		})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(iterations).To(Equal(3))
+		Expect(strings.Count(out.String(), "Run 1")).To(Equal(2))
 	})
 
-	It("should succeed to run with --all flag", func() {
-		withArgs([]string{
-			appName, "--all", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			run2 := demo.NewRun("Run 2")
+	It("should stop the continuous mode on a failing run", func() {
+		run, _ := newTestRun("Run 1")
+		run.Step(nil, demo.S("false"))
 
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-			sut.Add(run2, "run2", "second run")
+		sut := newTestDemo()
+		sut.Add(run, "run1", "first run")
 
-			Expect(sut.RunE()).To(Succeed())
-		})
-	})
-
-	It("should run selected demo by flag", func() {
-		withArgs([]string{
-			appName, "--run2", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			run2 := demo.NewRun("Run 2")
-
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-			sut.Add(run2, "run2", "second run")
-
-			Expect(sut.RunE()).To(Succeed())
-		})
-	})
-
-	It("should run selected demo by name alias", func() {
-		withArgs([]string{
-			appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			run2 := demo.NewRun("Run 2")
-
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-			sut.Add(run2, "run2", "second run")
-
-			Expect(sut.RunE()).To(Succeed())
-		})
-	})
-
-	It("should run with short option handling", func() {
-		withArgs([]string{
-			appName, "-a", "-i", "--run1",
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-
-			Expect(sut.RunE()).To(Succeed())
-		})
-	})
-
-	It("should run with all short flags", func() {
-		withArgs([]string{
-			appName, "-l", "-a", "-t=0", "-i", "-d", "-s=0",
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			run2 := demo.NewRun("Run 2")
-
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-			sut.Add(run2, "run2", "second run")
-
-			Expect(sut.RunE()).To(Succeed())
-		})
+		err := runDemo(sut, "--continuously", run1Flag)
+		Expect(err).To(MatchError(ContainSubstring(`step command "false" failed`)))
 	})
 
 	It("should run with light theme", func() {
-		runWithExpectedTitleColor([]string{
-			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, "\x1b[34m")
-	})
-
-	It("should run with auto theme", func() {
-		withColorFGBG("15;7", func() {
-			runWithExpectedTitleColor([]string{
-				appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
-			}, "\x1b[34m")
-		})
-	})
-
-	DescribeTable("should detect only light ANSI backgrounds",
-		func(background, expectedColor string) {
-			withColorFGBG("15;"+background, func() {
-				runWithExpectedTitleColor([]string{
-					appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
-				}, expectedColor)
-			})
-		},
-		Entry("bright ANSI background", "15", "\x1b[34m"),
-		Entry("first extended palette index", "16", "\x1b[36m"),
-		Entry("near-black extended palette index", "234", "\x1b[36m"),
-	)
-
-	It("should read run options after setup", func() {
-		withArgs([]string{
-			appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			origNoColor := color.NoColor
-			color.NoColor = false
-
-			defer func() { color.NoColor = origNoColor }()
-
-			run := demo.NewRun("Run 1")
-			out := &strings.Builder{}
-			Expect(run.SetOutput(out)).To(Succeed())
-
-			sut := demo.New()
-			sut.Add(run, "run1", "first run")
-			sut.Setup(func(_ context.Context, cmd *cli.Command) error {
-				return cmd.Set(demo.FlagTheme, string(demo.ThemeLight))
-			})
-
-			Expect(sut.RunE()).To(Succeed())
-			Expect(out.String()).To(ContainSubstring("\x1b[34m"))
-		})
-	})
-
-	It("should fail when theme is invalid", func() {
-		withArgs([]string{
-			appName, run1Flag, "--theme=ligth", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-
-			err := sut.RunE()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("invalid theme"))
-		})
+		expectTitleColor(blueTitle, "--theme=light")
 	})
 
 	It("should run with case-insensitive theme value", func() {
-		runWithExpectedTitleColor([]string{
-			appName, run1Flag, "--theme=LIGHT", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, "\x1b[34m")
+		expectTitleColor(blueTitle, "--theme=LIGHT")
+	})
+
+	DescribeTable("should detect only light ANSI backgrounds in auto theme",
+		func(background, expectedColor string) {
+			GinkgoT().Setenv("COLORFGBG", "15;"+background)
+			expectTitleColor(expectedColor, "--theme=auto")
+		},
+		Entry("light gray background", "7", blueTitle),
+		Entry("bright ANSI background", "15", blueTitle),
+		Entry("bright black background", "8", cyanTitle),
+		Entry("first extended palette index", "16", cyanTitle),
+		Entry("near-black extended palette index", "234", cyanTitle),
+	)
+
+	It("should read run options after setup", func() {
+		enableColor()
+
+		run, out := newTestRun("Run 1")
+		sut := newTestDemo()
+		sut.Add(run, "run1", "first run")
+		sut.Setup(func(_ context.Context, cmd *cli.Command) error {
+			return cmd.Set(demo.FlagTheme, string(demo.ThemeLight))
+		})
+
+		Expect(runDemo(sut, run1Flag)).To(Succeed())
+		Expect(out.String()).To(HavePrefix(blueTitle + "Run 1"))
+	})
+
+	It("should fail when theme is invalid", func() {
+		run, out := newTestRun("Run 1")
+		sut := newTestDemo()
+		sut.Add(run, "run1", "first run")
+
+		err := runDemo(sut, run1Flag, "--theme=ligth")
+		Expect(err).To(MatchError(ContainSubstring(`invalid theme "ligth"`)))
+		Expect(out.String()).To(BeEmpty())
 	})
 
 	It("should run with paired palettes configured via New options", func() {
-		runWithCustomPalettes([]string{
-			appName, run1Flag, "--theme=light", autoFlag, autoTimeoutFlag, immediateFlag,
-		})
+		expectCustomPalette("--theme=light")
 	})
 
 	It("should use custom palettes for auto theme with no explicit theme flag", func() {
-		withColorFGBG("15;7", func() {
-			runWithCustomPalettes([]string{
-				appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
-			})
-		})
-	})
-
-	It("should handle multiple runs with setup and cleanup", func() {
-		withArgs([]string{
-			appName, "--all", autoFlag, autoTimeoutFlag, immediateFlag,
-		}, func() {
-			run1 := demo.NewRun("Run 1")
-			run2 := demo.NewRun("Run 2")
-			run3 := demo.NewRun("Run 3")
-
-			sut := demo.New()
-			sut.Add(run1, "run1", "first run")
-			sut.Add(run2, "run2", "second run")
-			sut.Add(run3, "run3", "third run")
-
-			callCount := 0
-
-			sut.Setup(func(context.Context, *cli.Command) error {
-				callCount++
-
-				return nil
-			})
-
-			Expect(sut.RunE()).To(Succeed())
-			Expect(callCount).To(Equal(3))
-		})
-	})
-
-	It("should show the help if no run is selected", func() {
-		withArgs([]string{appName, "--continuously"}, func() {
-			out := &strings.Builder{}
-			sut := demo.New()
-			sut.Writer = out
-			sut.Add(demo.NewRun("Run 1"), "run1", "first run")
-
-			Expect(sut.RunE()).To(Succeed())
-			Expect(out.String()).To(ContainSubstring("GLOBAL OPTIONS"))
-		})
+		GinkgoT().Setenv("COLORFGBG", "15;7")
+		expectCustomPalette()
 	})
 
 	It("should run the cleanups in order when interrupted by a signal", func() {
@@ -360,10 +339,11 @@ var _ = Describe("Demo", func() {
 		session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(session).Should(gbytes.Say("> sleep 10"))
+		// A freshly built binary can take a while to start, for example on macOS.
+		Eventually(session, 10*time.Second).Should(gbytes.Say("> sleep 10"))
 		session.Terminate()
 
-		Eventually(session).Should(gexec.Exit(0))
+		Eventually(session, 10*time.Second).Should(gexec.Exit(0))
 		Expect(session.Out).To(gbytes.Say("run cleanup"))
 		Expect(session.Out).To(gbytes.Say("demo cleanup"))
 	})
@@ -380,62 +360,41 @@ var _ = Describe("Demo", func() {
 		session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 		Expect(err).ToNot(HaveOccurred())
 
-		Eventually(session).Should(gbytes.Say("> sleep 10"))
+		Eventually(session, 10*time.Second).Should(gbytes.Say("> sleep 10"))
 		session.Terminate()
 
-		Eventually(session).Should(gexec.Exit(1))
+		Eventually(session, 10*time.Second).Should(gexec.Exit(1))
 		Expect(session.Out).To(gbytes.Say("demo cleanup"))
 		Expect(session.Err).To(gbytes.Say("run cleanup failed"))
 	})
 
-	It("should use the auto theme for empty options", func() {
-		withColorFGBG("15;7", func() {
-			origNoColor := color.NoColor
-			color.NoColor = false
-
-			defer func() { color.NoColor = origNoColor }()
-
-			run := demo.NewRun("Run 1")
-			out := &strings.Builder{}
-			Expect(run.SetOutput(out)).To(Succeed())
-
-			Expect(run.RunWithOptions(&demo.Options{Auto: true, Immediate: true})).To(Succeed())
-			Expect(out.String()).To(ContainSubstring("\x1b[34m"))
-		})
-	})
-
-	It("should run with a context and arguments", func() {
-		out := &strings.Builder{}
+	It("should interrupt a running step and clean up when the context gets cancelled", func() {
+		// The buffer is safe to read while the run writes to it.
+		out := gbytes.NewBuffer()
 		run := demo.NewRun("Run 1")
 		Expect(run.SetOutput(out)).To(Succeed())
-
-		sut := demo.New()
-		sut.Add(run, "run1", "first run")
-
-		err := sut.RunContext(context.Background(), []string{
-			appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
-		})
-
-		Expect(err).ToNot(HaveOccurred())
-		Expect(out.String()).To(ContainSubstring("Run 1"))
-	})
-
-	It("should clean up and return no error when the context gets cancelled", func() {
-		run := demo.NewRun("Run 1")
-		Expect(run.SetOutput(&strings.Builder{})).To(Succeed())
 		run.Step(nil, demo.S("sleep 10"))
 
-		cleanedUp := false
-		sut := demo.New()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		go func() {
+			defer GinkgoRecover()
+
+			Eventually(out).Should(gbytes.Say("> sleep 10"))
+			cancel()
+		}()
+
+		var cleanupErr error
+
+		start := time.Now()
+		sut := newTestDemo()
 		sut.Add(run, "run1", "first run")
 		sut.Cleanup(func(ctx context.Context, _ *cli.Command) error {
-			cleanedUp = ctx.Err() == nil
+			cleanupErr = ctx.Err()
 
 			return nil
 		})
-
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		defer cancel()
 
 		err := sut.RunContext(
 			ctx,
@@ -443,12 +402,13 @@ var _ = Describe("Demo", func() {
 		)
 
 		Expect(err).ToNot(HaveOccurred())
-		Expect(cleanedUp).To(BeTrue())
+		Expect(cleanupErr).ToNot(HaveOccurred())
+		Expect(time.Since(start)).To(BeNumerically("<", 5*time.Second))
 	})
 
 	DescribeTable("should panic when a run name conflicts with a flag",
 		func(name string) {
-			sut := demo.New()
+			sut := newTestDemo()
 
 			Expect(func() { sut.Add(demo.NewRun("Run"), name, "conflict") }).
 				To(PanicWith(ContainSubstring(name)))
@@ -459,7 +419,7 @@ var _ = Describe("Demo", func() {
 	)
 
 	It("should panic when a run name conflicts with the version flag", func() {
-		sut := demo.New()
+		sut := newTestDemo()
 		sut.Version = "1.0.0"
 
 		Expect(func() { sut.Add(demo.NewRun("Run"), "version", "conflict") }).
@@ -471,12 +431,10 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("should run the demo cleanup when the setup fails", func() {
-		run := demo.NewRun("Run 1")
-		out := &strings.Builder{}
-		Expect(run.SetOutput(out)).To(Succeed())
+		run, out := newTestRun("Run 1")
 
 		cleanedUp := false
-		sut := demo.New()
+		sut := newTestDemo()
 		sut.Add(run, "run1", "first run")
 		sut.Setup(func(context.Context, *cli.Command) error {
 			return errSetupFailed
@@ -487,12 +445,7 @@ var _ = Describe("Demo", func() {
 			return nil
 		})
 
-		err := sut.RunContext(
-			context.Background(),
-			[]string{appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag},
-		)
-
-		Expect(err).To(MatchError(errSetupFailed))
+		Expect(runDemo(sut, run1Flag)).To(MatchError(errSetupFailed))
 		Expect(cleanedUp).To(BeTrue())
 		Expect(out.String()).To(BeEmpty())
 	})

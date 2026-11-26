@@ -5,12 +5,14 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	"github.com/saschagrunert/demo"
 )
 
@@ -144,17 +146,6 @@ var _ = Describe("Run", func() {
 		Expect(out.String()).To(ContainSubstring("echo hello"))
 	})
 
-	It("should succeed to run from a cli command", func() {
-		// Given
-		opts := demo.Options{Auto: true, Immediate: true}
-
-		// When
-		err := sut.RunWithOptions(&opts)
-
-		// Then
-		Expect(err).ToNot(HaveOccurred())
-	})
-
 	It("should succeed to run with setup and cleanup", func() {
 		// Given
 		setupCalled := false
@@ -197,7 +188,7 @@ var _ = Describe("Run", func() {
 		// Given
 		opts.HideDescriptions = true
 
-		sut.Step(demo.S("Hidden description"), demo.S("echo test"))
+		sut.Step(demo.S("Hidden description"), demo.S("echo $((40 + 2))"))
 
 		// When
 		err := sut.RunWithOptions(&opts)
@@ -205,24 +196,30 @@ var _ = Describe("Run", func() {
 		// Then
 		Expect(err).ToNot(HaveOccurred())
 		Expect(out.String()).ToNot(ContainSubstring("Hidden description"))
+		Expect(out.String()).ToNot(ContainSubstring(description[0]))
+		Expect(out.String()).To(ContainSubstring("> echo $((40 + 2))\n42\n"))
 	})
 
 	It("should succeed to run with dry-run", func() {
 		// Given
 		opts.DryRun = true
 
-		sut.Step(demo.S("Test step"), demo.S("echo should not run"))
+		marker := filepath.Join(GinkgoT().TempDir(), "marker")
+		sut.Step(demo.S("Test step"), demo.S("touch", marker))
 
 		// When
 		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
-		Expect(out.String()).To(ContainSubstring("echo should not run"))
+		Expect(out.String()).To(ContainSubstring("> touch"))
+		Expect(marker).ToNot(BeAnExistingFile())
 	})
 
 	It("should succeed to run with no-color", func() {
 		// Given
+		enableColor()
+
 		opts.NoColor = true
 
 		sut.Step(demo.S("Test step"), demo.S("echo test"))
@@ -232,6 +229,8 @@ var _ = Describe("Run", func() {
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("> echo test"))
+		Expect(out.String()).ToNot(ContainSubstring("\x1b["))
 	})
 
 	It("should succeed to run with skip steps", func() {
@@ -269,30 +268,35 @@ var _ = Describe("Run", func() {
 		// Given
 		opts.Shell = "sh"
 
-		sut.Step(demo.S("Shell test"), demo.S("echo test"))
+		sut.Step(demo.S("Shell test"), demo.S(`echo "shell=$0"`))
 
 		// When
 		err := sut.RunWithOptions(&opts)
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("shell=sh\n"))
 	})
 
-	It("should succeed to run with custom typewriter speed", func() {
-		// Given
-		opts.TypewriterSpeed = 10
-		opts.Immediate = false
-		opts.Auto = true
-		opts.AutoTimeout = 0
+	DescribeTable("should succeed to run with custom typewriter speed",
+		func(speed int, matcher types.GomegaMatcher) {
+			// Given
+			sut.Step(demo.S("Speed test"), demo.S("echo test"))
 
-		sut.Step(demo.S("Speed test"), demo.S("echo test"))
+			// When
+			start := time.Now()
+			err := sut.RunWithOptions(&demo.Options{Auto: true, TypewriterSpeed: speed})
 
-		// When
-		err := sut.RunWithOptions(&opts)
-
-		// Then
-		Expect(err).ToNot(HaveOccurred())
-	})
+			// Then
+			Expect(err).ToNot(HaveOccurred())
+			Expect(out.String()).To(ContainSubstring("# Speed test [1/1]:"))
+			Expect(time.Since(start)).To(matcher)
+		},
+		// About 30 characters with a random delay below the speed each, so
+		// with the default speed of 40ms this would take about 600ms.
+		Entry("without delays", 1, BeNumerically("<", 200*time.Millisecond)),
+		Entry("with up to 10ms delay", 10, BeNumerically(">", 20*time.Millisecond)),
+	)
 
 	It("should handle write errors gracefully", func() {
 		// Given
@@ -438,7 +442,8 @@ var _ = Describe("Run", func() {
 
 	It("should succeed to run with SetWorkDir", func() {
 		// Given
-		sut.SetWorkDir("/tmp")
+		dir := GinkgoT().TempDir()
+		sut.SetWorkDir(dir)
 		sut.Step(demo.S("Working dir test"), demo.S("pwd"))
 
 		// When
@@ -446,13 +451,15 @@ var _ = Describe("Run", func() {
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
-		Expect(out.String()).To(ContainSubstring("/tmp"))
+		Expect(out.String()).To(ContainSubstring("> pwd\n" + dir + "\n"))
 	})
 
 	It("should succeed to run with Chdir between steps", func() {
 		// Given
+		first, second := GinkgoT().TempDir(), GinkgoT().TempDir()
+		sut.SetWorkDir(first)
 		sut.Step(demo.S("First step"), demo.S("pwd"))
-		sut.Chdir("/tmp")
+		sut.Chdir(second)
 		sut.Step(demo.S("After chdir"), demo.S("pwd"))
 
 		// When
@@ -460,14 +467,16 @@ var _ = Describe("Run", func() {
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
-		Expect(out.String()).To(ContainSubstring("/tmp"))
+		Expect(out.String()).To(ContainSubstring("> pwd\n" + first + "\n"))
+		Expect(out.String()).To(ContainSubstring("> pwd\n" + second + "\n"))
 	})
 
 	It("should restore the work dir after Chdir for the next execution", func() {
 		// Given
-		sut.SetWorkDir("/")
+		first, second := GinkgoT().TempDir(), GinkgoT().TempDir()
+		sut.SetWorkDir(first)
 		sut.Step(demo.S("Before chdir"), demo.S("pwd"))
-		sut.Chdir("/tmp")
+		sut.Chdir(second)
 		sut.Step(demo.S("After chdir"), demo.S("pwd"))
 		Expect(sut.RunWithOptions(&opts)).To(Succeed())
 		out.Reset()
@@ -477,16 +486,18 @@ var _ = Describe("Run", func() {
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
-		Expect(out.String()).To(MatchRegexp(`> pwd\n/\n`))
-		Expect(out.String()).To(MatchRegexp(`> pwd\n/tmp\n`))
+		Expect(out.String()).To(ContainSubstring("> pwd\n" + first + "\n"))
+		Expect(out.String()).To(ContainSubstring("> pwd\n" + second + "\n"))
 	})
 
 	It("should apply Chdir even when steps are skipped", func() {
 		// Given
 		opts.SkipSteps = 1
 
+		dir := GinkgoT().TempDir()
+
 		sut.Step(demo.S("Skipped step"), demo.S("echo skipped"))
-		sut.Chdir("/tmp")
+		sut.Chdir(dir)
 		sut.Step(demo.S("After chdir"), demo.S("pwd"))
 
 		// When
@@ -495,7 +506,7 @@ var _ = Describe("Run", func() {
 		// Then
 		Expect(err).ToNot(HaveOccurred())
 		Expect(out.String()).ToNot(ContainSubstring("Skipped step"))
-		Expect(out.String()).To(ContainSubstring("/tmp"))
+		Expect(out.String()).To(ContainSubstring("> pwd\n" + dir + "\n"))
 	})
 
 	It("should not count Chdir in step numbering", func() {
@@ -517,7 +528,8 @@ var _ = Describe("Run", func() {
 		// Given
 		opts.DryRun = true
 
-		sut.Chdir("/tmp")
+		dir := GinkgoT().TempDir()
+		sut.Chdir(dir)
 		sut.Step(demo.S("Dry run chdir"), demo.S("pwd"))
 
 		// When
@@ -525,6 +537,8 @@ var _ = Describe("Run", func() {
 
 		// Then
 		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("> cd " + dir + "\n"))
+		Expect(out.String()).To(HaveSuffix("> pwd\n"))
 	})
 
 	It("should succeed to run with SetEnv", func() {
@@ -638,11 +652,24 @@ var _ = Describe("Run", func() {
 		cancelledOpts := opts
 		cancelledOpts.Context = ctx
 
+		hooks := 0
+
+		sut.Setup(func(context.Context) error {
+			hooks++
+
+			return nil
+		})
+		sut.Cleanup(func(context.Context) error {
+			hooks++
+
+			return nil
+		})
 		sut.Step(demo.S("Should not run"), demo.S("echo unreachable"))
 
 		err := sut.RunWithOptions(&cancelledOpts)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("context"))
+		Expect(err).To(MatchError(context.Canceled))
+		Expect(out.String()).To(BeEmpty())
+		Expect(hooks).To(BeZero())
 	})
 
 	It("should call cleanup even when a step fails", func() {
@@ -955,6 +982,41 @@ var _ = Describe("Run", func() {
 		// Then
 		Expect(err).To(MatchError(context.DeadlineExceeded))
 		Expect(cleanupErr).ToNot(HaveOccurred())
+	})
+
+	It("should use the auto theme for empty options", func() {
+		// Given
+		GinkgoT().Setenv("COLORFGBG", "15;7")
+		enableColor()
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Auto: true, Immediate: true})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(HavePrefix(blueTitle + title))
+	})
+
+	It("should pass a file input to the step commands", func() {
+		// Given
+		reader, writer, err := os.Pipe()
+		Expect(err).ToNot(HaveOccurred())
+
+		DeferCleanup(reader.Close)
+
+		_, err = writer.WriteString("piped input\n")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(writer.Close()).To(Succeed())
+
+		Expect(sut.SetInput(reader)).To(Succeed())
+		sut.Step(nil, demo.S("cat"))
+
+		// When
+		err = sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("> cat\npiped input\n"))
 	})
 })
 
