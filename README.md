@@ -49,7 +49,7 @@ GLOBAL OPTIONS:
    --auto, -a                            run the demo in automatic mode, where every step gets executed automatically
    --dry-run                             only print the commands without executing them
    --no-color                            disable colored output
-   --theme string                        set output theme palette (auto, dark or light) (default: auto)
+   --theme string                        set the color theme: auto (detected from COLORFGBG), dark or light (default: auto)
    --auto-timeout duration, -t duration  time to wait between steps in auto mode (default: 1s)
    --with-breakpoints                    pause at breakpoint steps
    --continue-on-error                   continue if a step fails
@@ -76,10 +76,17 @@ d.Name = "A demo of something"
 d.Usage = "Learn how this framework is being used"
 ```
 
-Theme support works out of the box (`--theme auto|dark|light`). You only need
-constructor options when overriding the defaults:
+Theme support works out of the box (`--theme auto|dark|light`). The `auto`
+theme picks the light palette if the `COLORFGBG` environment variable reports a
+light terminal background, and the dark palette otherwise. You only need
+constructor options when overriding the defaults. Palettes use the attributes of
+the [fatih/color](https://github.com/fatih/color) package, and empty fields
+fall back to the default palette of the theme, so `demo.Palette{}` keeps the
+defaults:
 
 ```go
+import "github.com/fatih/color"
+
 myDarkPalette := demo.Palette{
 	Title:       []color.Attribute{color.FgCyan},
 	Description: []color.Attribute{color.FgWhite, color.Faint},
@@ -157,8 +164,10 @@ func example() *demo.Run {
 
 The `example()` function creates a new demo run, which itself contains of
 multiple steps. These steps are executed in order, can contain a description and
-a command to be executed. Wrapping commands in multiple lines will automatically
-create a line break in the command line.
+a command to be executed. The elements of a command are joined with spaces into
+a single shell command and displayed with one line per element, so
+`demo.S("cd x", "ls")` runs `cd x ls`. Use `&&` or separate steps to run
+multiple commands.
 
 `StepCanFail` works like `Step` but does not stop the demo when the command
 exits with a non-zero status. The `--continue-on-error` flag applies this
@@ -168,6 +177,19 @@ behavior to all steps.
 is passed. This is useful for inserting manual checkpoints in an otherwise
 automatic demo. Breakpoints do not count as steps, neither for the `[n/N]`
 step counter nor for `--skip-steps`.
+
+## Running a demo
+
+Every run gets a flag with its name, so the example above runs with
+`./demo --demo-0`, and `--all` runs all runs in the order they were added.
+Without a selected run, the demo prints its help. Invalid flags print a single
+line with the error, and `--help` shows all flags.
+
+By default, the demo waits before every description and command. On a terminal,
+any key continues; otherwise, for example with piped input, a newline does. With
+`--auto`, the demo continues on its own after `--auto-timeout`. `--dry-run`
+prints the commands without executing them, but setup and cleanup functions
+still run.
 
 ## Setup and Cleanup functions
 
@@ -199,6 +221,23 @@ func cleanup(ctx context.Context, _ *cli.Command) error {
 	return demo.EnsureWithContext(ctx, "echo 'Doing cleanup...'")
 }
 ```
+
+A run can have its own setup and cleanup functions as well:
+
+```go
+r.Setup(func(ctx context.Context) error {
+	return demo.EnsureWithContext(ctx, "mkdir -p /tmp/demo")
+})
+r.Cleanup(func(ctx context.Context) error {
+	return demo.EnsureWithContext(ctx, "rm -rf /tmp/demo")
+})
+```
+
+The functions run in this order: demo setup, run setup, the steps, run cleanup
+and demo cleanup. Both cleanup functions also run if the setup or the run fails
+or gets interrupted, and their context is not cancelled by the interruption.
+`Ensure`, `EnsureWithContext` and `MustEnsure` run commands through `bash`
+without showing their output, which suits setup and cleanup work.
 
 ## Working directory
 
@@ -268,17 +307,19 @@ keypress.
 ## Programmatic usage
 
 `RunE` starts the demo and returns any error instead of calling `os.Exit`.
-This is useful for testing or when embedding a demo in a larger application:
+`RunContext` does the same with a custom context and arguments, which is useful
+for testing or when embedding a demo in a larger application:
 
 ```go
 d := demo.New()
-if err := d.RunE(); err != nil {
+if err := d.RunContext(ctx, []string{"demo", "--all", "--auto"}); err != nil {
 	log.Fatal(err)
 }
 ```
 
 Individual runs can be executed directly with `RunWithOptions`, bypassing the
-CLI flag parsing:
+CLI flag parsing. The options are copied, so they can be reused, and `nil` uses
+the defaults. Unlike the CLI flags, a zero `AutoTimeout` means no delay:
 
 ```go
 r := demo.NewRun("My Run")
@@ -291,7 +332,9 @@ err := r.RunWithOptions(&demo.Options{
 })
 ```
 
-See the `Options` struct documentation for the full list of fields.
+See the `Options` struct documentation for the full list of fields. A run
+writes to `os.Stdout` and reads from `os.Stdin` by default, which `SetOutput`
+and `SetInput` can change.
 
 # Contributing
 

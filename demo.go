@@ -6,11 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"slices"
-	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +18,10 @@ import (
 
 // Demo is the main type for creating command line demos. It wraps a
 // cli.Command and manages a set of runs that can be selected via flags.
+//
+// The embedded command can be customized, for example its Name, Usage or
+// additional Flags. Its Action and the built-in flags are owned by the Demo
+// and must not be replaced.
 type Demo struct {
 	*cli.Command
 
@@ -88,18 +90,7 @@ const (
 
 	// DefaultShell is the default shell used to execute commands.
 	DefaultShell = "bash"
-
-	// ThemeDark is the default theme for terminal backgrounds using dark colors.
-	ThemeDark = "dark"
-
-	// ThemeLight is the theme for terminal backgrounds using light colors.
-	ThemeLight = "light"
-
-	// ThemeAuto auto-detects the terminal background and picks a palette.
-	ThemeAuto = "auto"
 )
-
-var errInvalidTheme = errors.New("invalid theme")
 
 func createFlags() []cli.Flag {
 	return []cli.Flag{
@@ -125,9 +116,9 @@ func createFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:        FlagTheme,
-			Value:       ThemeAuto,
-			DefaultText: ThemeAuto,
-			Usage:       "set output theme palette (auto, dark or light)",
+			Value:       string(ThemeAuto),
+			DefaultText: string(ThemeAuto),
+			Usage:       "set the color theme: auto (detected from COLORFGBG), dark or light",
 			Validator:   validateTheme,
 		},
 		&cli.DurationFlag{
@@ -192,6 +183,7 @@ func collectRunFunctions(
 			runFns = append(runFns, func(ctx context.Context, cmd *cli.Command) error {
 				runOpts := d.optionsFrom(ctx, cmd)
 
+				//nolint:contextcheck // the context is passed in the options
 				return run.RunWithOptions(&runOpts)
 			})
 		}
@@ -239,11 +231,13 @@ func runContinuously(ctx context.Context, runSelected func() error) error {
 	}
 }
 
-// NewOption configures a demo created through New.
-type NewOption func(*Demo)
+// Option configures a demo created through New.
+type Option func(*Demo)
 
-// WithPalettes overrides both built-in palettes in one call.
-func WithPalettes(dark, light Palette) NewOption {
+// WithPalettes overrides the palettes of the dark and light themes. Empty
+// fields of a palette fall back to the default palette of its theme, so
+// passing Palette{} keeps the defaults of that theme.
+func WithPalettes(dark, light Palette) Option {
 	return func(d *Demo) {
 		d.palettes.dark = dark
 		d.palettes.light = light
@@ -251,7 +245,7 @@ func WithPalettes(dark, light Palette) NewOption {
 }
 
 // New creates a new Demo instance.
-func New(options ...NewOption) *Demo {
+func New(options ...Option) *Demo {
 	emptyFn := func(context.Context, *cli.Command) error { return nil }
 	demo := &Demo{
 		Command: ccli.NewCommand(),
@@ -268,6 +262,10 @@ func New(options ...NewOption) *Demo {
 
 	demo.Flags = createFlags()
 	demo.UseShortOptionHandling = true
+	// Report usage errors only once, through the returned error.
+	demo.OnUsageError = func(_ context.Context, _ *cli.Command, err error, _ bool) error {
+		return fmt.Errorf("%w (see --help)", err)
+	}
 
 	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
 		runFns := collectRunFunctions(cmd, demo, demo.runs)
@@ -291,18 +289,40 @@ func New(options ...NewOption) *Demo {
 	return demo
 }
 
-// Setup sets the setup function called before each run.
+// Setup sets the setup function called before each run, before the setup
+// function of the run itself. If it fails, the run is skipped, but the cleanup
+// function still runs.
 func (d *Demo) Setup(setupFn func(context.Context, *cli.Command) error) {
 	d.setup = setupFn
 }
 
-// Cleanup sets the cleanup function called after each run.
+// Cleanup sets the cleanup function called after each run, after the cleanup
+// function of the run itself, also if the setup or the run failed. Its context is not cancelled by an
+// interruption, and gets a timeout of 10 seconds if the demo got interrupted
+// already.
 func (d *Demo) Cleanup(cleanupFn func(context.Context, *cli.Command) error) {
 	d.cleanup = cleanupFn
 }
 
-// Add registers a new run with the given flag name and description.
+// Add registers a new run, which gets selected by the flag --<name>. It panics
+// if the name is already used by one of the flags defined at the time of the
+// call, by the help flag, or by the version flag if a Version is set.
 func (d *Demo) Add(run *Run, name, description string) {
+	for _, existing := range d.Flags {
+		if slices.Contains(existing.Names(), name) {
+			panic(fmt.Sprintf("demo: run name %q conflicts with an existing flag", name))
+		}
+	}
+
+	builtin := []string{"help", "h"}
+	if d.Version != "" && !d.HideVersion {
+		builtin = append(builtin, "version", "v")
+	}
+
+	if slices.Contains(builtin, name) {
+		panic(fmt.Sprintf("demo: run name %q conflicts with a built-in flag", name))
+	}
+
 	flag := &cli.BoolFlag{
 		Name:  name,
 		Usage: description,
@@ -314,20 +334,36 @@ func (d *Demo) Add(run *Run, name, description string) {
 
 const cleanupTimeout = 10 * time.Second
 
-// Run starts the demo and exits the process on error.
+// Run starts the demo with the process arguments and exits the process on
+// error.
 func (d *Demo) Run() {
 	if err := d.RunE(); err != nil {
-		log.Printf("run failed: %v", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// RunE starts the demo and returns any error instead of exiting.
+// RunE starts the demo with the process arguments and returns any error
+// instead of exiting. It is the same as RunContext with
+// context.Background() and os.Args.
+func (d *Demo) RunE() error {
+	return d.RunContext(context.Background(), os.Args)
+}
+
+// RunContext starts the demo with the provided context and arguments, where
+// args[0] is the program name. Cancelling the context interrupts the demo like
+// a signal does.
 //
 // SIGINT and SIGTERM cancel the demo and run the cleanup. A second signal
-// terminates the process right away.
-func (d *Demo) RunE() error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+// terminates the process right away, unless the program handles the signals
+// itself through signal.Notify. An interrupted demo returns no error. A nil
+// context means context.Background().
+func (d *Demo) RunContext(ctx context.Context, args []string) error {
+	if ctx == nil {
+		ctx = context.Background() //nolint:contextcheck // there is no parent context
+	}
+
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
@@ -335,12 +371,13 @@ func (d *Demo) RunE() error {
 		stop()
 	}()
 
-	if runErr := d.Command.Run(ctx, os.Args); runErr != nil {
-		if errors.Is(runErr, errInterrupt) || errors.Is(runErr, context.Canceled) {
+	if runErr := d.Command.Run(ctx, args); runErr != nil {
+		interrupted := ctx.Err() != nil && errors.Is(runErr, ctx.Err())
+		if interrupted || errors.Is(runErr, errInterrupt) {
 			return nil
 		}
 
-		return fmt.Errorf("run: %w", runErr)
+		return fmt.Errorf("demo: %w", runErr)
 	}
 
 	return nil
@@ -355,7 +392,7 @@ func (d *Demo) runWithHooks(ctx context.Context, cmd *cli.Command, runFn runActi
 
 	if err := d.setup(ctx, cmd); err != nil {
 		if ctx.Err() == nil {
-			return fmt.Errorf("setup: %w", err)
+			runErr = fmt.Errorf("setup: %w", err)
 		}
 	} else if ctx.Err() == nil {
 		runErr = runFn(ctx, cmd)
@@ -425,56 +462,20 @@ func withoutInterruption(err, cause error) error {
 
 func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 	opts := optionsFrom(ctx, cmd)
-	resolvedTheme := resolveTheme(opts.Theme)
 
-	opts.Theme = resolvedTheme
-	opts.Palette = d.paletteForTheme(resolvedTheme)
-
-	initColorFunctions(&opts)
+	// The flag is validated already, RunWithOptions reports any error.
+	if theme, err := resolveTheme(opts.Theme); err == nil {
+		opts.Theme = theme
+		opts.Palette = d.paletteForTheme(theme)
+	}
 
 	return opts
 }
 
-func (d *Demo) paletteForTheme(theme string) Palette {
+func (d *Demo) paletteForTheme(theme Theme) Palette {
 	if theme == ThemeLight {
 		return d.palettes.light
 	}
 
 	return d.palettes.dark
-}
-
-func resolveTheme(theme string) string {
-	normalized, err := normalizedTheme(theme)
-	if err != nil {
-		return ThemeDark
-	}
-
-	if normalized == ThemeAuto {
-		if detectLightBackground() {
-			return ThemeLight
-		}
-
-		return ThemeDark
-	}
-
-	return normalized
-}
-
-func normalizedTheme(theme string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(theme)) {
-	case ThemeAuto:
-		return ThemeAuto, nil
-	case ThemeLight:
-		return ThemeLight, nil
-	case ThemeDark:
-		return ThemeDark, nil
-	default:
-		return "", fmt.Errorf("%w %q: allowed values are auto, dark, light", errInvalidTheme, theme)
-	}
-}
-
-func validateTheme(theme string) error {
-	_, err := normalizedTheme(theme)
-
-	return err
 }

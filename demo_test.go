@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/fatih/color"
 	. "github.com/onsi/ginkgo/v2"
@@ -43,23 +44,9 @@ func withArgs(args []string, fn func()) {
 	fn()
 }
 
-func withEnv(key, value string, fn func()) {
-	orig, existed := os.LookupEnv(key)
-
-	if value == "" {
-		Expect(os.Unsetenv(key)).To(Succeed())
-	} else {
-		Expect(os.Setenv(key, value)).To(Succeed())
-	}
-
-	defer func() {
-		if existed {
-			Expect(os.Setenv(key, orig)).To(Succeed())
-		} else {
-			Expect(os.Unsetenv(key)).To(Succeed())
-		}
-	}()
-
+// withColorFGBG sets the COLORFGBG environment variable for the current spec.
+func withColorFGBG(value string, fn func()) {
+	GinkgoT().Setenv("COLORFGBG", value)
 	fn()
 }
 
@@ -247,7 +234,7 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("should run with auto theme", func() {
-		withEnv("COLORFGBG", "15;7", func() {
+		withColorFGBG("15;7", func() {
 			runWithExpectedTitleColor([]string{
 				appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
 			}, "\x1b[34m")
@@ -256,7 +243,7 @@ var _ = Describe("Demo", func() {
 
 	DescribeTable("should detect only light ANSI backgrounds",
 		func(background, expectedColor string) {
-			withEnv("COLORFGBG", "15;"+background, func() {
+			withColorFGBG("15;"+background, func() {
 				runWithExpectedTitleColor([]string{
 					appName, run1Flag, "--theme=auto", autoFlag, autoTimeoutFlag, immediateFlag,
 				}, expectedColor)
@@ -283,7 +270,7 @@ var _ = Describe("Demo", func() {
 			sut := demo.New()
 			sut.Add(run, "run1", "first run")
 			sut.Setup(func(_ context.Context, cmd *cli.Command) error {
-				return cmd.Set(demo.FlagTheme, demo.ThemeLight)
+				return cmd.Set(demo.FlagTheme, string(demo.ThemeLight))
 			})
 
 			Expect(sut.RunE()).To(Succeed())
@@ -318,7 +305,7 @@ var _ = Describe("Demo", func() {
 	})
 
 	It("should use custom palettes for auto theme with no explicit theme flag", func() {
-		withEnv("COLORFGBG", "15;7", func() {
+		withColorFGBG("15;7", func() {
 			runWithCustomPalettes([]string{
 				appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
 			})
@@ -399,5 +386,114 @@ var _ = Describe("Demo", func() {
 		Eventually(session).Should(gexec.Exit(1))
 		Expect(session.Out).To(gbytes.Say("demo cleanup"))
 		Expect(session.Err).To(gbytes.Say("run cleanup failed"))
+	})
+
+	It("should use the auto theme for empty options", func() {
+		withColorFGBG("15;7", func() {
+			origNoColor := color.NoColor
+			color.NoColor = false
+
+			defer func() { color.NoColor = origNoColor }()
+
+			run := demo.NewRun("Run 1")
+			out := &strings.Builder{}
+			Expect(run.SetOutput(out)).To(Succeed())
+
+			Expect(run.RunWithOptions(&demo.Options{Auto: true, Immediate: true})).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("\x1b[34m"))
+		})
+	})
+
+	It("should run with a context and arguments", func() {
+		out := &strings.Builder{}
+		run := demo.NewRun("Run 1")
+		Expect(run.SetOutput(out)).To(Succeed())
+
+		sut := demo.New()
+		sut.Add(run, "run1", "first run")
+
+		err := sut.RunContext(context.Background(), []string{
+			appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag,
+		})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("Run 1"))
+	})
+
+	It("should clean up and return no error when the context gets cancelled", func() {
+		run := demo.NewRun("Run 1")
+		Expect(run.SetOutput(&strings.Builder{})).To(Succeed())
+		run.Step(nil, demo.S("sleep 10"))
+
+		cleanedUp := false
+		sut := demo.New()
+		sut.Add(run, "run1", "first run")
+		sut.Cleanup(func(ctx context.Context, _ *cli.Command) error {
+			cleanedUp = ctx.Err() == nil
+
+			return nil
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		err := sut.RunContext(
+			ctx,
+			[]string{appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag},
+		)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(cleanedUp).To(BeTrue())
+	})
+
+	DescribeTable("should panic when a run name conflicts with a flag",
+		func(name string) {
+			sut := demo.New()
+
+			Expect(func() { sut.Add(demo.NewRun("Run"), name, "conflict") }).
+				To(PanicWith(ContainSubstring(name)))
+		},
+		Entry("built-in flag", "auto"),
+		Entry("built-in alias", "a"),
+		Entry("help flag", "help"),
+	)
+
+	It("should panic when a run name conflicts with the version flag", func() {
+		sut := demo.New()
+		sut.Version = "1.0.0"
+
+		Expect(func() { sut.Add(demo.NewRun("Run"), "version", "conflict") }).
+			To(PanicWith(ContainSubstring("version")))
+
+		sut.HideVersion = true
+
+		Expect(func() { sut.Add(demo.NewRun("Run"), "version", "no conflict") }).ToNot(Panic())
+	})
+
+	It("should run the demo cleanup when the setup fails", func() {
+		run := demo.NewRun("Run 1")
+		out := &strings.Builder{}
+		Expect(run.SetOutput(out)).To(Succeed())
+
+		cleanedUp := false
+		sut := demo.New()
+		sut.Add(run, "run1", "first run")
+		sut.Setup(func(context.Context, *cli.Command) error {
+			return errSetupFailed
+		})
+		sut.Cleanup(func(context.Context, *cli.Command) error {
+			cleanedUp = true
+
+			return nil
+		})
+
+		err := sut.RunContext(
+			context.Background(),
+			[]string{appName, run1Flag, autoFlag, autoTimeoutFlag, immediateFlag},
+		)
+
+		Expect(err).To(MatchError(errSetupFailed))
+		Expect(cleanedUp).To(BeTrue())
+		Expect(out.String()).To(BeEmpty())
 	})
 })

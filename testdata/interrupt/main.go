@@ -14,7 +14,7 @@ import (
 func main() {
 	run := demo.NewRun("Interrupt")
 	run.Step(nil, demo.S("sleep 10"))
-	run.Cleanup(func() error {
+	run.Cleanup(func(context.Context) error {
 		fmt.Println("run cleanup")
 
 		if os.Getenv("FAIL_RUN_CLEANUP") != "" {
