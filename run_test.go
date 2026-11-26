@@ -451,6 +451,24 @@ var _ = Describe("Run", func() {
 		Expect(out.String()).To(ContainSubstring("/tmp"))
 	})
 
+	It("should restore the work dir after Chdir for the next execution", func() {
+		// Given
+		sut.SetWorkDir("/")
+		sut.Step(demo.S("Before chdir"), demo.S("pwd"))
+		sut.Chdir("/tmp")
+		sut.Step(demo.S("After chdir"), demo.S("pwd"))
+		Expect(sut.RunWithOptions(&opts)).To(Succeed())
+		out.Reset()
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(MatchRegexp(`> pwd\n/\n`))
+		Expect(out.String()).To(MatchRegexp(`> pwd\n/tmp\n`))
+	})
+
 	It("should apply Chdir even when steps are skipped", func() {
 		// Given
 		opts.SkipSteps = 1
