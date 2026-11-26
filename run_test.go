@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -469,6 +470,62 @@ var _ = Describe("Run", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(out.String()).To(ContainSubstring("> pwd\n" + first + "\n"))
 		Expect(out.String()).To(ContainSubstring("> pwd\n" + second + "\n"))
+	})
+
+	It("should resolve relative Chdir paths against the current work dir", func() {
+		// Given
+		base := GinkgoT().TempDir()
+		Expect(os.MkdirAll(filepath.Join(base, "a", "b"), 0o750)).To(Succeed())
+
+		sut.SetWorkDir(base)
+		sut.Chdir("a")
+		sut.Step(demo.S("In a"), demo.S("pwd"))
+		sut.Chdir("b")
+		sut.Step(demo.S("In b"), demo.S("pwd"))
+		sut.Chdir("..")
+		sut.Step(demo.S("Back in a"), demo.S("pwd"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("> cd a\n"))
+		Expect(out.String()).To(MatchRegexp(
+			`(?s)> pwd\n%[1]s/a\n.*> pwd\n%[1]s/a/b\n.*> pwd\n%[1]s/a\n`, regexp.QuoteMeta(base),
+		))
+	})
+
+	It("should resolve relative Chdir paths against the process dir without a work dir", func() {
+		// Given
+		base := GinkgoT().TempDir()
+		Expect(os.MkdirAll(filepath.Join(base, "a", "b"), 0o750)).To(Succeed())
+		GinkgoT().Chdir(base)
+
+		sut.Chdir("a")
+		sut.Chdir("b")
+		sut.Step(demo.S("In b"), demo.S("pwd -P"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(MatchRegexp(`> pwd -P\n.*/a/b\n`))
+	})
+
+	It("should ignore an empty Chdir", func() {
+		// Given
+		sut.Chdir("")
+		sut.Step(demo.S("Only step"), demo.S("true"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("Only step [1/1]"))
+		Expect(out.String()).ToNot(ContainSubstring("> cd"))
 	})
 
 	It("should restore the work dir after Chdir for the next execution", func() {
