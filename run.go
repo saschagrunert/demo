@@ -8,12 +8,10 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/fatih/color"
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
@@ -55,12 +53,6 @@ const (
 	commandWaitDelay = time.Second
 )
 
-const (
-	lightBackgroundThreshold = 9
-	lightBackgroundMaximum   = 15
-	lightBackgroundIndex     = 7
-)
-
 // Run is an abstraction for one part of the Demo. A demo can contain multiple
 // runs.
 type Run struct {
@@ -71,8 +63,9 @@ type Run struct {
 	in          *inputReader
 	inFile      *os.File
 	options     Options
-	setup       func() error
-	cleanup     func() error
+	colors      colors
+	setup       func(context.Context) error
+	cleanup     func(context.Context) error
 	dir         string
 	env         []string
 }
@@ -83,38 +76,14 @@ type step struct {
 	dir                   string
 }
 
-// Palette defines the terminal color attributes used by a run.
-type Palette struct {
-	Title       []color.Attribute
-	Description []color.Attribute
-	Command     []color.Attribute
-}
-
-// DefaultDarkPalette returns the default palette for dark backgrounds.
-func DefaultDarkPalette() Palette {
-	return Palette{
-		Title:       []color.Attribute{color.FgCyan},
-		Description: []color.Attribute{color.FgWhite, color.Faint},
-		Command:     []color.Attribute{color.FgGreen},
-	}
-}
-
-// DefaultLightPalette returns the default high-contrast palette for light backgrounds.
-func DefaultLightPalette() Palette {
-	return Palette{
-		Title:       []color.Attribute{color.FgBlue},
-		Description: []color.Attribute{color.FgHiBlue},
-		Command:     []color.Attribute{color.FgGreen},
-	}
-}
-
 // Options specify the run options.
 type Options struct {
-	//nolint:containedctx // required to thread context through to subprocesses
-	// Context is passed through to exec.CommandContext for step execution.
+	// Context cancels the run, including a running step command. Defaults to
+	// context.Background().
 	Context context.Context
 
-	// AutoTimeout is the delay between steps when Auto is enabled (default: 1s).
+	// AutoTimeout is the delay between steps when Auto is enabled. Zero means
+	// no delay. The --auto-timeout flag defaults to 1s.
 	AutoTimeout time.Duration
 	// Auto enables automatic mode where steps execute without waiting for input.
 	Auto bool
@@ -124,13 +93,18 @@ type Options struct {
 	ContinueOnError bool
 	// HideDescriptions suppresses step description text between commands.
 	HideDescriptions bool
-	// DryRun prints commands without executing them.
+	// DryRun prints commands without executing them. Setup and cleanup
+	// functions still run.
 	DryRun bool
-	// NoColor disables colored output.
+	// NoColor disables colored output. Colors are also disabled if the
+	// NO_COLOR environment variable is set or stdout is not a terminal, see
+	// the github.com/fatih/color package.
 	NoColor bool
-	// Theme selects the active palette variant (for example "dark" or "light").
-	Theme string
-	// Palette overrides the selected theme palette when provided.
+	// Theme selects the palette. The zero value means ThemeAuto. Unknown
+	// values make RunWithOptions fail.
+	Theme Theme
+	// Palette overrides colors of the selected theme. Empty fields fall back
+	// to the default palette of the theme.
 	Palette Palette
 	// Immediate disables the typewriter animation and prints output instantly.
 	Immediate bool
@@ -141,15 +115,12 @@ type Options struct {
 	// TypewriterSpeed is the maximum milliseconds per character for the typewriter
 	// animation. Values <= 0 are replaced with DefaultTypewriterSpeed.
 	TypewriterSpeed int
-
-	cyanSprintf  func(format string, a ...any) string
-	whiteSprintf func(format string, a ...any) string
-	greenSprintf func(format string, a ...any) string
 }
 
-func emptyFn() error { return nil }
+func emptyFn(context.Context) error { return nil }
 
-// NewRun creates a new run for the provided description string.
+// NewRun creates a new run with a title and optional description lines.
+// Output goes to os.Stdout and input is read from os.Stdin.
 func NewRun(title string, description ...string) *Run {
 	return &Run{
 		title:       title,
@@ -176,7 +147,7 @@ func optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 		HideDescriptions: cmd.Bool(FlagHideDescriptions),
 		DryRun:           cmd.Bool(FlagDryRun),
 		NoColor:          noColor,
-		Theme:            cmd.String(FlagTheme),
+		Theme:            Theme(cmd.String(FlagTheme)),
 		Immediate:        cmd.Bool(FlagImmediate),
 		SkipSteps:        cmd.Int(FlagSkipSteps),
 		Shell:            cmd.String(FlagShell),
@@ -184,65 +155,6 @@ func optionsFrom(ctx context.Context, cmd *cli.Command) Options {
 	}
 
 	return opts
-}
-
-func initColorFunctions(opts *Options) {
-	if opts.NoColor {
-		opts.cyanSprintf = fmt.Sprintf
-		opts.whiteSprintf = fmt.Sprintf
-		opts.greenSprintf = fmt.Sprintf
-	} else {
-		palette := mergePaletteWithDefaults(opts.Theme, opts.Palette)
-
-		opts.cyanSprintf = color.New(palette.Title...).SprintfFunc()
-		opts.whiteSprintf = color.New(palette.Description...).SprintfFunc()
-		opts.greenSprintf = color.New(palette.Command...).SprintfFunc()
-	}
-}
-
-func mergePaletteWithDefaults(theme string, palette Palette) Palette {
-	defaults := defaultPalette(theme)
-
-	if len(palette.Title) == 0 {
-		palette.Title = defaults.Title
-	}
-
-	if len(palette.Description) == 0 {
-		palette.Description = defaults.Description
-	}
-
-	if len(palette.Command) == 0 {
-		palette.Command = defaults.Command
-	}
-
-	return palette
-}
-
-func defaultPalette(theme string) Palette {
-	switch resolveTheme(theme) {
-	case ThemeLight:
-		return DefaultLightPalette()
-	default:
-		return DefaultDarkPalette()
-	}
-}
-
-func detectLightBackground() bool {
-	colorFGBG := os.Getenv("COLORFGBG")
-	if colorFGBG == "" {
-		return false
-	}
-
-	parts := strings.Split(colorFGBG, ";")
-	bgRaw := parts[len(parts)-1]
-
-	bg, err := strconv.Atoi(bgRaw)
-	if err != nil {
-		return false
-	}
-
-	return bg == lightBackgroundIndex ||
-		(bg >= lightBackgroundThreshold && bg <= lightBackgroundMaximum)
 }
 
 // S is a short-hand for converting string slice syntaxes.
@@ -278,13 +190,17 @@ func (r *Run) SetInput(input io.Reader) error {
 	return nil
 }
 
-// Setup sets the setup function called before this run.
-func (r *Run) Setup(setupFn func() error) {
+// Setup sets the setup function called before this run. It receives the
+// context of the run, which gets cancelled on interruption. If it fails, the
+// steps are skipped, but the cleanup function still runs.
+func (r *Run) Setup(setupFn func(context.Context) error) {
 	r.setup = setupFn
 }
 
-// Cleanup sets the cleanup function called after this run.
-func (r *Run) Cleanup(cleanupFn func() error) {
+// Cleanup sets the cleanup function called after this run, also if the setup
+// or the run failed. Its context is not cancelled by an interruption, and gets a timeout
+// of 10 seconds if the run got interrupted already.
+func (r *Run) Cleanup(cleanupFn func(context.Context) error) {
 	r.cleanup = cleanupFn
 }
 
@@ -293,19 +209,22 @@ func (r *Run) SetWorkDir(dir string) {
 	r.dir = dir
 }
 
-// SetEnv sets environment variables for all steps in this run.
-// Each entry should be in the form "KEY=VALUE". These are appended
-// to the current process environment.
+// SetEnv adds environment variables for all steps in this run. Each entry
+// has the form "KEY=VALUE". Repeated calls add to the variables of earlier
+// calls, and all of them are appended to the current process environment.
 func (r *Run) SetEnv(env ...string) {
 	r.env = append(r.env, env...)
 }
 
-// Step creates a new step on the provided run.
+// Step adds a step to the run. The text lines are printed as a description
+// comment, and the command lines are joined with spaces into a single shell
+// command, which is displayed with one line per element. Either may be nil.
 func (r *Run) Step(text, command []string) {
 	r.steps = append(r.steps, step{text: text, command: command})
 }
 
-// StepCanFail creates a new step which can fail on execution.
+// StepCanFail adds a step like Step, whose command may fail without stopping
+// the run. Its error is ignored.
 func (r *Run) StepCanFail(text, command []string) {
 	r.steps = append(r.steps, step{text: text, command: command, canFail: true})
 }
@@ -321,14 +240,7 @@ func (r *Run) BreakPoint() {
 	r.steps = append(r.steps, step{canFail: true, isBreakPoint: true})
 }
 
-// Run executes the run in the provided CLI context.
-func (r *Run) Run(ctx context.Context, cmd *cli.Command) error {
-	opts := optionsFrom(ctx, cmd)
-
-	return r.RunWithOptions(&opts)
-}
-
-func applyDefaults(opts *Options) {
+func applyDefaults(opts *Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
@@ -345,29 +257,50 @@ func applyDefaults(opts *Options) {
 		opts.TypewriterSpeed = DefaultTypewriterSpeed
 	}
 
-	if opts.cyanSprintf == nil {
-		initColorFunctions(opts)
+	theme, err := resolveTheme(opts.Theme)
+	if err != nil {
+		return err
 	}
+
+	opts.Theme = theme
+
+	return nil
 }
 
-// RunWithOptions executes the run with the provided Options.
+// RunWithOptions executes the run with the provided Options, which may be nil
+// to use the defaults. The Options are copied, so the caller's value is never
+// modified and can be reused.
 func (r *Run) RunWithOptions(opts *Options) error {
-	applyDefaults(opts)
-
-	if err := r.setup(); err != nil {
-		if ctxErr := opts.Context.Err(); ctxErr != nil {
-			return fmt.Errorf("setup interrupted: %w", ctxErr)
-		}
-
-		return fmt.Errorf("setup: %w", err)
+	var options Options
+	if opts != nil {
+		options = *opts
 	}
 
-	r.options = *opts
+	if err := applyDefaults(&options); err != nil {
+		return err
+	}
 
-	runErr := r.executeSteps()
+	r.options = options
+	r.colors = newColors(&options)
 
-	// The demo-level cleanup runs after this one, see Demo.runWithHooks.
-	if err := r.cleanup(); err != nil {
+	var runErr error
+
+	if err := r.setup(options.Context); err != nil {
+		runErr = fmt.Errorf("setup: %w", err)
+		if ctxErr := options.Context.Err(); ctxErr != nil {
+			runErr = fmt.Errorf("setup interrupted: %w", ctxErr)
+		}
+	} else {
+		runErr = r.executeSteps()
+	}
+
+	// The cleanup also runs after a failed setup, to remove what it created
+	// already. The demo-level cleanup runs after this one, see
+	// Demo.runWithHooks.
+	cleanupCtx, cancel := cleanupContext(options.Context)
+	defer cancel()
+
+	if err := r.cleanup(cleanupCtx); err != nil {
 		cleanupErr := &cleanupError{err: err}
 		if runErr == nil {
 			return cleanupErr
@@ -402,7 +335,7 @@ func (r *Run) executeSteps() error {
 			r.dir = s.dir
 
 			if !r.options.HideDescriptions {
-				cdStr := r.options.greenSprintf("> cd %s", s.dir)
+				cdStr := r.colors.command("> cd %s", s.dir)
 				if err := write(r.out, cdStr+"\n"); err != nil {
 					return err
 				}
@@ -443,19 +376,19 @@ func (r *Run) executeSteps() error {
 }
 
 func (r *Run) printTitleAndDescription() error {
-	if err := write(r.out, r.options.cyanSprintf("%s\n", r.title)); err != nil {
+	if err := write(r.out, r.colors.title("%s\n", r.title)); err != nil {
 		return err
 	}
 
 	separator := strings.Repeat("=", utf8.RuneCountInString(r.title))
-	if err := write(r.out, r.options.cyanSprintf("%s\n", separator)); err != nil {
+	if err := write(r.out, r.colors.title("%s\n", separator)); err != nil {
 		return err
 	}
 
 	if !r.options.HideDescriptions {
 		for _, d := range r.description {
 			if err := write(
-				r.out, r.options.whiteSprintf("%s\n", d),
+				r.out, r.colors.description("%s\n", d),
 			); err != nil {
 				return err
 			}
@@ -518,12 +451,12 @@ func (s *step) echo(r *Run, current, maximum int) error {
 				colon = ""
 			}
 
-			prepared[i] = r.options.whiteSprintf(
+			prepared[i] = r.colors.description(
 				"# %s [%d/%d]%s\n",
 				x, current, maximum, colon,
 			)
 		} else {
-			prepared[i] = r.options.whiteSprintf("# %s", x)
+			prepared[i] = r.colors.description("# %s", x)
 		}
 	}
 
@@ -547,7 +480,7 @@ func (s *step) execute(r *Run) error {
 	}
 
 	displayCommand := strings.Join(s.command, " \\\n    ")
-	cmdString := r.options.greenSprintf("> %s", displayCommand)
+	cmdString := r.colors.command("> %s", displayCommand)
 
 	if err := s.print(r, cmdString); err != nil {
 		return err
