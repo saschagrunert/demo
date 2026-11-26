@@ -11,7 +11,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Only cancel superseded pull request runs, every other run gets its own
+  # group so that it always finishes.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -24,6 +26,8 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make all
+      - name: Verify that go.mod and go.sum are tidy
+        run: go mod tidy && .github/git-status
 
   lint:
     runs-on: ubuntu-latest
@@ -39,8 +43,24 @@ jobs:
         with:
           version: ${{ steps.golangci-lint.outputs.version }}
 
-  test:
+  vulncheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          # The default "stable" would take precedence over the go.mod version.
+          go-version-input: ""
+          go-version-file: go.mod
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,9 +69,15 @@ jobs:
           go-version-file: go.mod
       - run: make test
       - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-        if: github.actor != 'dependabot[bot]'
+        if: matrix.os == 'ubuntu-latest' && github.actor != 'dependabot[bot]'
         with:
           files: build/coverage/coverprofile
           token: ${{ secrets.CODECOV_TOKEN }}
           verbose: true
           fail_ci_if_error: true
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        if: matrix.os == 'ubuntu-latest' && github.actor != 'dependabot[bot]' && !cancelled()
+        with:
+          files: build/coverage/coverage.junit
+          report_type: test_results
+          token: ${{ secrets.CODECOV_TOKEN }}

@@ -46,16 +46,13 @@ linters:
     - godoclint
     - godot
     - godox
-    - goheader
     - gomoddirectives
-    - gomodguard_v2
     - goprintffuncname
     - gosec
     - gosmopolitan
     - govet
     - grouper
     - iface
-    - importas
     - inamedparam
     - ineffassign
     - interfacebloat
@@ -81,7 +78,6 @@ linters:
     - nolintlint
     - nonamedreturns
     - nosprintfhostport
-    - paralleltest
     - perfsprint
     - prealloc
     - predeclared
@@ -101,7 +97,6 @@ linters:
     - testifylint
     - testpackage
     - thelper
-    - tparallel
     - unconvert
     - unparam
     - unqueryvet
@@ -150,10 +145,6 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
 formatters:
   enable:
     - gci
@@ -164,7 +155,3 @@ formatters:
     - swaggo
   exclusions:
     generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
