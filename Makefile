@@ -56,6 +56,7 @@ test: ## Run tests with coverage.
 	rm -rf $(COVERAGE_PATH) && mkdir -p $(COVERAGE_PATH)
 	$(GO) tool ginkgo run $(TESTFLAGS) \
 		-r \
+		--race \
 		--cover \
 		--randomize-all \
 		--randomize-suites \
@@ -90,5 +91,4 @@ ${GOLANGCI_LINT}:
 
 .PHONY: lint
 lint: ${GOLANGCI_LINT} ## Run golangci-lint.
-	GL_DEBUG=gocritic ${GOLANGCI_LINT} linters
 	${GOLANGCI_LINT} run

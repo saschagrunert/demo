@@ -269,7 +269,8 @@ func applyDefaults(opts *Options) error {
 
 // RunWithOptions executes the run with the provided Options, which may be nil
 // to use the defaults. The Options are copied, so the caller's value is never
-// modified and can be reused.
+// modified and can be reused. If the context is done already, nothing runs,
+// neither the setup, the steps nor the cleanup.
 func (r *Run) RunWithOptions(opts *Options) error {
 	var options Options
 	if opts != nil {
@@ -278,6 +279,10 @@ func (r *Run) RunWithOptions(opts *Options) error {
 
 	if err := applyDefaults(&options); err != nil {
 		return err
+	}
+
+	if err := options.Context.Err(); err != nil {
+		return fmt.Errorf("context: %w", err)
 	}
 
 	r.options = options
