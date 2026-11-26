@@ -166,7 +166,8 @@ behavior to all steps.
 
 `BreakPoint` inserts a pause that only takes effect when `--with-breakpoints`
 is passed. This is useful for inserting manual checkpoints in an otherwise
-automatic demo.
+automatic demo. Breakpoints do not count as steps, neither for the `[n/N]`
+step counter nor for `--skip-steps`.
 
 ## Setup and Cleanup functions
 
@@ -249,15 +250,20 @@ Variables are appended to the current process environment. Multiple calls to
 ## Signal handling
 
 The demo framework handles SIGINT (Ctrl-C) and SIGTERM. When either signal is
-received, the current context is cancelled and the demo-level cleanup function
-runs with a 10-second timeout. In continuous mode (`--continuously`), an
-interrupt causes a clean exit with no error. In non-continuous mode, the demo
-exits cleanly as well.
+received, the current context is cancelled, which stops a running command, the
+typewriter animation or the wait for input. The run-level cleanup runs first,
+followed by the demo-level cleanup with a fresh 10-second timeout. A signal
+that arrives while a cleanup runs does not cancel it. The demo then exits
+cleanly with no error, in continuous mode as well, unless a cleanup failed. A
+second signal terminates the process right away, for example if a cleanup
+hangs.
 
-During the typewriter animation and while waiting for user input, the terminal
-is in raw mode, which means the kernel does not translate Ctrl-C into SIGINT.
-Instead, the framework detects the Ctrl-C byte directly and stops the demo,
-running cleanup as expected.
+While waiting for user input, and during the typewriter animation when not in
+`--auto` mode, the terminal is in raw mode, which means the kernel does not
+translate Ctrl-C into SIGINT. Instead, the framework detects the Ctrl-C byte
+directly and stops the demo, running cleanup as expected. In raw mode, any key
+advances the demo, and an escape sequence like an arrow key counts as a single
+keypress.
 
 ## Programmatic usage
 
