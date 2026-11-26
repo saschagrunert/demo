@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -230,8 +231,26 @@ func (r *Run) StepCanFail(text, command []string) {
 }
 
 // Chdir creates a step that changes the working directory for subsequent steps.
+// A relative dir is resolved against the current working directory of the run,
+// which is the one of SetWorkDir or a previous Chdir, or the one of the process
+// if neither is set. Shell features like ~ or cd - are not supported. An empty
+// dir is ignored.
 func (r *Run) Chdir(dir string) {
+	if dir == "" {
+		return
+	}
+
 	r.steps = append(r.steps, step{dir: dir})
+}
+
+// resolveDir returns dir resolved against the current working directory of a
+// run. An empty current directory stands for the one of the process.
+func resolveDir(current, dir string) string {
+	if current == "" || filepath.IsAbs(dir) {
+		return dir
+	}
+
+	return filepath.Join(current, dir)
 }
 
 // BreakPoint creates a new breakpoint step that pauses execution when
@@ -337,7 +356,7 @@ func (r *Run) executeSteps() error {
 
 		// Always apply Chdir steps, even when skipped
 		if s.dir != "" {
-			r.dir = s.dir
+			r.dir = resolveDir(r.dir, s.dir)
 
 			if !r.options.HideDescriptions {
 				cdStr := r.colors.command("> cd %s", s.dir)

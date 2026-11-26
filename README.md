@@ -264,8 +264,10 @@ func example() *demo.Run {
 
 `SetWorkDir` sets the initial working directory for the run. `Chdir` inserts a
 step that changes the working directory for all subsequent steps and displays
-`> cd <dir>` in the output. If no working directory is set, commands run in
-the current process directory.
+`> cd <dir>` in the output. A relative `Chdir` path is resolved against the
+current working directory of the run, while shell features like `~` or `cd -`
+are not supported. If no working directory is set, commands run in the current
+process directory.
 
 ## Environment variables
 
