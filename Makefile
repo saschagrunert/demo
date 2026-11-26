@@ -3,7 +3,7 @@ GO := go
 BUILD_PATH := $(shell pwd)/build
 COVERAGE_PATH := $(BUILD_PATH)/coverage
 
-GOLANGCI_LINT_VERSION := v2.13.2
+GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
 
 COLOR := \\033[36m
