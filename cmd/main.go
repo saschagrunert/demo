@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	. "github.com/saschagrunert/demo" //nolint:stylecheck // dot imports are intended here
+	. "github.com/saschagrunert/demo"
 	"github.com/urfave/cli/v3"
 )
 

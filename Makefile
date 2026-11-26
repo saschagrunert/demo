@@ -4,14 +4,14 @@ BUILD_PATH := $(shell pwd)/build
 COVERAGE_PATH := $(BUILD_PATH)/coverage
 
 GOLANGCI_LINT_VERSION := v2.15.0
-GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
+GOLANGCI_LINT_PATH := $(BUILD_PATH)/golangci-lint-$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT := $(GOLANGCI_LINT_PATH)/golangci-lint
 
 COLOR := \\033[36m
 NOCOLOR := \\033[0m
 WIDTH := 25
 
-# Build flags: strip symbols only in release mode
-# For development builds, omit -s -w to preserve debug symbols
+# Build flags: symbols are stripped by default, use `make LDFLAGS=` to keep them
 LDFLAGS ?= -s -w
 
 define go-build
@@ -41,6 +41,7 @@ help: ## Display this help.
 
 ##@ Build targets:
 
+.PHONY: all
 all: ## Build the demo binary.
 	$(call go-build,./cmd)
 
@@ -53,7 +54,7 @@ clean: ## Remove build artifacts.
 .PHONY: test
 test: ## Run tests with coverage.
 	rm -rf $(COVERAGE_PATH) && mkdir -p $(COVERAGE_PATH)
-	$(GO) run github.com/onsi/ginkgo/v2/ginkgo run $(TESTFLAGS) \
+	$(GO) tool ginkgo run $(TESTFLAGS) \
 		-r \
 		--cover \
 		--randomize-all \
@@ -71,8 +72,11 @@ ${GOLANGCI_LINT}:
 	export \
 		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
 		VERSION=${GOLANGCI_LINT_VERSION} \
-		BINDIR=${BUILD_PATH} && \
-	curl -sfL $$URL/refs/tags/$$VERSION/install.sh | sh -s $$VERSION
+		BINDIR=$(GOLANGCI_LINT_PATH) && \
+	mkdir -p $$BINDIR && \
+	curl -sfL $$URL/refs/tags/$$VERSION/install.sh -o $$BINDIR/install.sh && \
+	sh $$BINDIR/install.sh $$VERSION && \
+	rm $$BINDIR/install.sh
 
 .PHONY: lint
 lint: ${GOLANGCI_LINT} ## Run golangci-lint.
