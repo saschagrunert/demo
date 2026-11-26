@@ -1,7 +1,6 @@
 package demo
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -31,7 +30,30 @@ var (
 	errInterrupt = errors.New("interrupted")
 )
 
-const ctrlC = 0x03
+// cleanupError marks the error of a cleanup function, which is reported even
+// if the demo got interrupted.
+type cleanupError struct {
+	err error
+}
+
+func (e *cleanupError) Error() string {
+	return "cleanup: " + e.err.Error()
+}
+
+func (e *cleanupError) Unwrap() error {
+	return e.err
+}
+
+const (
+	ctrlC  = 0x03
+	escape = 0x1b
+
+	resetColors = "\x1b[0m"
+
+	// commandWaitDelay limits how long a step waits for its output to be
+	// closed after the command exited.
+	commandWaitDelay = time.Second
+)
 
 const (
 	lightBackgroundThreshold = 9
@@ -46,7 +68,7 @@ type Run struct {
 	description []string
 	steps       []step
 	out         io.Writer
-	in          *bufio.Reader
+	in          *inputReader
 	inFile      *os.File
 	options     Options
 	setup       func() error
@@ -134,7 +156,7 @@ func NewRun(title string, description ...string) *Run {
 		description: description,
 		steps:       nil,
 		out:         os.Stdout,
-		in:          bufio.NewReader(os.Stdin),
+		in:          newInputReader(os.Stdin),
 		inFile:      os.Stdin,
 		options:     Options{},
 		setup:       emptyFn,
@@ -245,7 +267,7 @@ func (r *Run) SetInput(input io.Reader) error {
 		return errInputNil
 	}
 
-	r.in = bufio.NewReader(input)
+	r.in = newInputReader(input)
 
 	if f, ok := input.(*os.File); ok {
 		r.inFile = f
@@ -333,6 +355,10 @@ func (r *Run) RunWithOptions(opts *Options) error {
 	applyDefaults(opts)
 
 	if err := r.setup(); err != nil {
+		if ctxErr := opts.Context.Err(); ctxErr != nil {
+			return fmt.Errorf("setup interrupted: %w", ctxErr)
+		}
+
 		return fmt.Errorf("setup: %w", err)
 	}
 
@@ -340,11 +366,9 @@ func (r *Run) RunWithOptions(opts *Options) error {
 
 	runErr := r.executeSteps()
 
-	// Run-level cleanup runs independently of demo-level cleanup in
-	// createRunSelected. On SIGINT the signal goroutine handles demo-level
-	// cleanup while this run-level cleanup may still be in progress.
-	if cleanupErr := r.cleanup(); cleanupErr != nil {
-		cleanupErr = fmt.Errorf("cleanup: %w", cleanupErr)
+	// The demo-level cleanup runs after this one, see Demo.runWithHooks.
+	if err := r.cleanup(); err != nil {
+		cleanupErr := &cleanupError{err: err}
 		if runErr == nil {
 			return cleanupErr
 		}
@@ -382,6 +406,19 @@ func (r *Run) executeSteps() error {
 				if err := write(r.out, cdStr+"\n"); err != nil {
 					return err
 				}
+			}
+
+			continue
+		}
+
+		if s.isBreakPoint {
+			// Skip breakpoints up to the last skipped step.
+			if r.options.SkipSteps > 0 && current <= r.options.SkipSteps {
+				continue
+			}
+
+			if err := s.wait(r); err != nil {
+				return err
 			}
 
 			continue
@@ -445,7 +482,7 @@ func (r *Run) countVisibleSteps() int {
 	count := 0
 
 	for _, s := range r.steps {
-		if s.dir == "" {
+		if s.dir == "" && !s.isBreakPoint {
 			count++
 		}
 	}
@@ -462,10 +499,6 @@ func (s *step) run(r *Run, current, maximum int) error {
 		if err := s.echo(r, current, maximum); err != nil {
 			return err
 		}
-	}
-
-	if s.isBreakPoint {
-		return s.wait(r)
 	}
 
 	if len(s.command) > 0 {
@@ -506,6 +539,8 @@ func (s *step) execute(r *Run) error {
 	cmd.Stdout = r.out
 	cmd.Stdin = r.inFile
 	cmd.Dir = r.dir
+	// Do not wait for background processes which keep the output open.
+	cmd.WaitDelay = commandWaitDelay
 
 	if len(r.env) > 0 {
 		cmd.Env = append(os.Environ(), r.env...)
@@ -527,16 +562,19 @@ func (s *step) execute(r *Run) error {
 	}
 
 	err := cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil
+	}
 
-	if s.canFail {
-		return nil
+	if ctxErr := r.options.Context.Err(); ctxErr != nil {
+		return fmt.Errorf("step command %q interrupted: %w", joinedCommand, ctxErr)
 	}
 
 	if printErr := s.print(r, ""); printErr != nil {
 		return printErr
 	}
 
-	if err != nil {
+	if err != nil && !s.canFail {
 		return fmt.Errorf("step command %q failed: %w", joinedCommand, err)
 	}
 
@@ -564,24 +602,73 @@ func (s *step) print(r *Run, msg ...string) error {
 }
 
 func (s *step) typewrite(r *Run, m string) error {
-	restore, raw := r.enterRawMode()
+	// Raw mode hides keypresses during the animation. Nothing reads input in
+	// auto mode, so keep the terminal as is to let Ctrl-C interrupt the demo.
+	restore, raw := func() {}, false
+	if !r.options.Auto {
+		restore, raw = r.enterRawMode()
+	}
 	defer restore()
 
-	for _, c := range m {
-		//nolint:gosec // random sleep timing for visual effect, not security-sensitive
-		time.Sleep(time.Duration(rand.IntN(r.options.TypewriterSpeed)) * time.Millisecond)
+	colored := strings.Contains(m, "\x1b[")
 
-		ch := string(c)
-		if raw && c == '\n' {
-			ch = "\r\n"
+	for m != "" {
+		token := nextTypewriterToken(m)
+		m = m[len(token):]
+
+		if token[0] != escape {
+			//nolint:gosec // random sleep timing for visual effect, not security-sensitive
+			delay := time.Duration(rand.IntN(r.options.TypewriterSpeed)) * time.Millisecond
+
+			select {
+			case <-time.After(delay):
+			case <-r.options.Context.Done():
+				// End the line, and do not leave the terminal colored.
+				end := "\n"
+				if raw {
+					end = "\r\n"
+				}
+
+				if colored {
+					end = resetColors + end
+				}
+
+				if err := write(r.out, end); err != nil {
+					return err
+				}
+
+				return fmt.Errorf("typewrite: %w", r.options.Context.Err())
+			}
 		}
 
-		if err := write(r.out, ch); err != nil {
+		if raw && token == "\n" {
+			token = "\r\n"
+		}
+
+		if err := write(r.out, token); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// nextTypewriterToken returns the next character of m, or a whole ANSI escape
+// sequence, which gets written at once without any animation delay.
+func nextTypewriterToken(m string) string {
+	if len(m) > 1 && m[0] == escape && m[1] == '[' {
+		for i := 2; i < len(m); i++ {
+			if m[i] >= '@' && m[i] <= '~' {
+				return m[:i+1]
+			}
+		}
+
+		return m
+	}
+
+	_, size := utf8.DecodeRuneInString(m)
+
+	return m[:size]
 }
 
 func (s *step) waitOrSleep(r *Run) error {
@@ -632,6 +719,14 @@ func (r *Run) promptAndWait(prompt string) (bool, error) {
 	}
 
 	if err := r.readInput(raw); err != nil {
+		// Do not leave the prompt behind when interrupted.
+		interrupted := r.options.Context.Err() != nil || errors.Is(err, errInterrupt)
+		if interrupted && (raw || isTerminal(r.out)) {
+			if clearErr := write(r.out, "\r\x1b[K"); clearErr != nil {
+				return raw, clearErr
+			}
+		}
+
 		return raw, err
 	}
 
@@ -660,27 +755,13 @@ func (r *Run) enterRawMode() (func(), bool) {
 	return func() { _ = term.Restore(intFd, oldState) }, true
 }
 
-// readInput reads input, using single-byte read in raw mode or line read otherwise.
+// readInput waits for a keypress in raw mode or for a newline otherwise.
 func (r *Run) readInput(raw bool) error {
 	if raw {
-		b, err := r.in.ReadByte()
-		if err != nil {
-			return fmt.Errorf("unable to read keypress: %w", err)
-		}
-
-		if b == ctrlC {
-			return errInterrupt
-		}
-
-		return nil
+		return r.in.keypress(r.options.Context)
 	}
 
-	_, err := r.in.ReadBytes('\n')
-	if err != nil {
-		return fmt.Errorf("unable to read newline: %w", err)
-	}
-
-	return nil
+	return r.in.line(r.options.Context)
 }
 
 func moveCursorUp(w io.Writer) error {

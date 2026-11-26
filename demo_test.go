@@ -3,12 +3,15 @@ package demo_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 
 	"github.com/fatih/color"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
+	"github.com/onsi/gomega/gexec"
 	"github.com/saschagrunert/demo"
 	"github.com/urfave/cli/v3"
 )
@@ -346,5 +349,55 @@ var _ = Describe("Demo", func() {
 			Expect(sut.RunE()).To(Succeed())
 			Expect(callCount).To(Equal(3))
 		})
+	})
+
+	It("should show the help if no run is selected", func() {
+		withArgs([]string{appName, "--continuously"}, func() {
+			out := &strings.Builder{}
+			sut := demo.New()
+			sut.Writer = out
+			sut.Add(demo.NewRun("Run 1"), "run1", "first run")
+
+			Expect(sut.RunE()).To(Succeed())
+			Expect(out.String()).To(ContainSubstring("GLOBAL OPTIONS"))
+		})
+	})
+
+	It("should run the cleanups in order when interrupted by a signal", func() {
+		binary, err := gexec.Build("github.com/saschagrunert/demo/testdata/interrupt")
+		Expect(err).ToNot(HaveOccurred())
+
+		DeferCleanup(gexec.CleanupBuildArtifacts)
+
+		cmd := exec.Command(binary, "--run", autoFlag, autoTimeoutFlag, immediateFlag)
+		session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+		Expect(err).ToNot(HaveOccurred())
+
+		Eventually(session).Should(gbytes.Say("> sleep 10"))
+		session.Terminate()
+
+		Eventually(session).Should(gexec.Exit(0))
+		Expect(session.Out).To(gbytes.Say("run cleanup"))
+		Expect(session.Out).To(gbytes.Say("demo cleanup"))
+	})
+
+	It("should report a failing cleanup when interrupted by a signal", func() {
+		binary, err := gexec.Build("github.com/saschagrunert/demo/testdata/interrupt")
+		Expect(err).ToNot(HaveOccurred())
+
+		DeferCleanup(gexec.CleanupBuildArtifacts)
+
+		cmd := exec.Command(binary, "--run", autoFlag, autoTimeoutFlag, immediateFlag)
+
+		cmd.Env = append(os.Environ(), "FAIL_RUN_CLEANUP=1")
+		session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+		Expect(err).ToNot(HaveOccurred())
+
+		Eventually(session).Should(gbytes.Say("> sleep 10"))
+		session.Terminate()
+
+		Eventually(session).Should(gexec.Exit(1))
+		Expect(session.Out).To(gbytes.Say("demo cleanup"))
+		Expect(session.Err).To(gbytes.Say("run cleanup failed"))
 	})
 })

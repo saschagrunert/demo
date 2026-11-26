@@ -213,25 +213,8 @@ func createRunSelected(
 ) func() error {
 	return func() error {
 		for _, runFn := range runFns {
-			if err := demo.setup(ctx, cmd); err != nil {
-				return fmt.Errorf("setup: %w", err)
-			}
-
-			runErr := runFn(ctx, cmd)
-
-			if ctx.Err() == nil {
-				if cleanupErr := demo.cleanup(ctx, cmd); cleanupErr != nil {
-					cleanupErr = fmt.Errorf("cleanup: %w", cleanupErr)
-					if runErr == nil {
-						return cleanupErr
-					}
-
-					return errors.Join(runErr, cleanupErr)
-				}
-			}
-
-			if runErr != nil {
-				return runErr
+			if err := demo.runWithHooks(ctx, cmd, runFn); err != nil {
+				return err
 			}
 		}
 
@@ -288,6 +271,14 @@ func New(options ...NewOption) *Demo {
 
 	demo.Action = func(ctx context.Context, cmd *cli.Command) error {
 		runFns := collectRunFunctions(cmd, demo, demo.runs)
+		if len(runFns) == 0 {
+			if err := cli.ShowRootCommandHelp(cmd); err != nil {
+				return fmt.Errorf("show help: %w", err)
+			}
+
+			return nil
+		}
+
 		runSelected := createRunSelected(demo, ctx, cmd, runFns)
 
 		if cmd.Bool(FlagContinuously) {
@@ -332,49 +323,19 @@ func (d *Demo) Run() {
 }
 
 // RunE starts the demo and returns any error instead of exiting.
+//
+// SIGINT and SIGTERM cancel the demo and run the cleanup. A second signal
+// terminates the process right away.
 func (d *Demo) RunE() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sig := make(chan os.Signal, 1)
-
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sig)
-
-	errCh := make(chan error, 1)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	go func() {
-		select {
-		case <-sig:
-			cancel()
-
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
-			defer cleanupCancel()
-
-			//nolint:contextcheck // intentionally using a new context since the parent is cancelled
-			if err := d.cleanup(cleanupCtx, d.Command); err != nil {
-				errCh <- fmt.Errorf("cleanup on interrupt: %w", err)
-
-				return
-			}
-
-			errCh <- nil
-		case <-ctx.Done():
-			errCh <- nil
-
-			return
-		}
+		<-ctx.Done()
+		stop()
 	}()
 
-	runErr := d.Command.Run(ctx, os.Args)
-
-	cancel()
-
-	if cleanupErr := <-errCh; cleanupErr != nil {
-		return cleanupErr
-	}
-
-	if runErr != nil {
+	if runErr := d.Command.Run(ctx, os.Args); runErr != nil {
 		if errors.Is(runErr, errInterrupt) || errors.Is(runErr, context.Canceled) {
 			return nil
 		}
@@ -383,6 +344,83 @@ func (d *Demo) RunE() error {
 	}
 
 	return nil
+}
+
+// runWithHooks runs the demo setup, the run itself and the demo cleanup. If
+// the context gets cancelled, for example by a signal, the cleanup still runs
+// with a fresh timeout and only errors not caused by the interruption are
+// returned.
+func (d *Demo) runWithHooks(ctx context.Context, cmd *cli.Command, runFn runAction) error {
+	var runErr error
+
+	if err := d.setup(ctx, cmd); err != nil {
+		if ctx.Err() == nil {
+			return fmt.Errorf("setup: %w", err)
+		}
+	} else if ctx.Err() == nil {
+		runErr = runFn(ctx, cmd)
+	}
+
+	cleanupCtx, cancel := cleanupContext(ctx)
+	defer cancel()
+
+	if err := d.cleanup(cleanupCtx, cmd); err != nil {
+		runErr = errors.Join(runErr, &cleanupError{err: err})
+	}
+
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if err := withoutInterruption(runErr, ctxErr); err != nil {
+			return err
+		}
+
+		return fmt.Errorf("interrupted: %w", ctxErr)
+	}
+
+	// A Ctrl-C keypress in raw mode interrupts like a signal does.
+	if errors.Is(runErr, errInterrupt) {
+		if err := withoutInterruption(runErr, errInterrupt); err != nil {
+			return err
+		}
+
+		return errInterrupt
+	}
+
+	return runErr
+}
+
+// cleanupContext returns the context for cleanup functions, which the first
+// signal does not cancel. If the demo got interrupted already, the cleanup
+// gets a fresh timeout instead.
+func cleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx.Err() != nil {
+		return context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	}
+
+	return context.WithoutCancel(ctx), func() {}
+}
+
+// withoutInterruption removes the errors caused by the cause of an
+// interruption from err, while keeping cleanup errors and all other joined
+// errors.
+func withoutInterruption(err, cause error) error {
+	// Only the top-level joined errors get split up.
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var kept []error
+
+		for _, e := range joined.Unwrap() {
+			if e = withoutInterruption(e, cause); e != nil {
+				kept = append(kept, e)
+			}
+		}
+
+		return errors.Join(kept...)
+	}
+
+	if _, ok := errors.AsType[*cleanupError](err); !ok && errors.Is(err, cause) {
+		return nil
+	}
+
+	return err
 }
 
 func (d *Demo) optionsFrom(ctx context.Context, cmd *cli.Command) Options {

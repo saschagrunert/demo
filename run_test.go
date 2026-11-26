@@ -3,6 +3,8 @@ package demo_test
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -669,6 +671,182 @@ var _ = Describe("Run", func() {
 		err := sut.RunWithOptions(&cancelOpts)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("context"))
+	})
+
+	It("should not wait at breakpoints when they are disabled", func() {
+		// Given
+		Expect(sut.SetInput(strings.NewReader("\n\n\n\n"))).To(Succeed())
+
+		sut.Step(demo.S("First"), demo.S("echo one"))
+		sut.BreakPoint()
+		sut.Step(demo.S("Second"), demo.S("echo two"))
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Immediate: true, NoColor: true})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("First [1/2]"))
+		Expect(out.String()).To(ContainSubstring("Second [2/2]"))
+		Expect(out.String()).ToNot(ContainSubstring("bp"))
+	})
+
+	It("should wait at breakpoints when they are enabled", func() {
+		// Given
+		Expect(sut.SetInput(strings.NewReader("\n\n\n\n\n"))).To(Succeed())
+
+		sut.Step(demo.S("First"), demo.S("echo one"))
+		sut.BreakPoint()
+		sut.Step(demo.S("Second"), demo.S("echo two"))
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Immediate: true, NoColor: true, BreakPoint: true})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("bp"))
+		Expect(out.String()).To(ContainSubstring("Second [2/2]"))
+	})
+
+	It("should not count breakpoints for skipped steps", func() {
+		// Given
+		opts.SkipSteps = 1
+
+		sut.Step(demo.S("First"), demo.S("echo one"))
+		sut.BreakPoint()
+		sut.Step(demo.S("Second"), demo.S("echo two"))
+
+		// When
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).ToNot(ContainSubstring("First"))
+		Expect(out.String()).To(ContainSubstring("Second [2/2]"))
+	})
+
+	It("should accept a last input line without a newline", func() {
+		// Given
+		Expect(sut.SetInput(strings.NewReader("\nx"))).To(Succeed())
+		sut.Step(demo.S("Step"), demo.S("echo hello"))
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Immediate: true})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("should stop waiting for input on context cancellation", func() {
+		// Given
+		reader, writer := io.Pipe()
+		defer writer.Close()
+
+		Expect(sut.SetInput(reader)).To(Succeed())
+		sut.Step(demo.S("Step"), demo.S("echo hello"))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{Immediate: true, Context: ctx})
+
+		// Then
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+	})
+
+	It("should report an interrupted command as cancellation", func() {
+		// Given
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		sut.StepCanFail(demo.S("Slow step"), demo.S("sleep 10"))
+
+		// When
+		start := time.Now()
+		err := sut.RunWithOptions(&demo.Options{Auto: true, Immediate: true, Context: ctx})
+
+		// Then
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+		Expect(time.Since(start)).To(BeNumerically("<", 5*time.Second))
+	})
+
+	It("should not wait for background processes holding the output", func() {
+		// Given
+		sut.Step(nil, demo.S("sleep 10 &"))
+
+		// When
+		start := time.Now()
+		err := sut.RunWithOptions(&opts)
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(time.Since(start)).To(BeNumerically("<", 5*time.Second))
+	})
+
+	It("should stop the typewriter animation on context cancellation", func() {
+		// Given
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		sut.Step(demo.S(strings.Repeat("x", 100)), nil)
+
+		// When
+		start := time.Now()
+		err := sut.RunWithOptions(&demo.Options{
+			Auto:            true,
+			Context:         ctx,
+			TypewriterSpeed: 200,
+		})
+
+		// Then
+		Expect(err).To(MatchError(context.DeadlineExceeded))
+		Expect(time.Since(start)).To(BeNumerically("<", 5*time.Second))
+		Expect(out.String()).ToNot(ContainSubstring("\x1b"))
+	})
+
+	It("should not wait at breakpoints within the skipped steps", func() {
+		// Given
+		Expect(sut.SetInput(strings.NewReader("\n\n"))).To(Succeed())
+
+		sut.Step(demo.S("First"), demo.S("echo one"))
+		sut.BreakPoint()
+		sut.Step(demo.S("Second"), demo.S("echo two"))
+
+		// When
+		err := sut.RunWithOptions(&demo.Options{
+			Immediate:  true,
+			NoColor:    true,
+			BreakPoint: true,
+			SkipSteps:  1,
+		})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).ToNot(ContainSubstring("bp"))
+		Expect(out.String()).To(ContainSubstring("Second [2/2]"))
+	})
+
+	It("should leave piped input after the newline to the step commands", func() {
+		// Given
+		reader, writer, err := os.Pipe()
+		Expect(err).ToNot(HaveOccurred())
+
+		DeferCleanup(reader.Close)
+
+		_, err = writer.WriteString("\n\nhello\n")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(writer.Close()).To(Succeed())
+
+		Expect(sut.SetInput(reader)).To(Succeed())
+		sut.Step(nil, demo.S("read x; echo got=$x"))
+
+		// When
+		err = sut.RunWithOptions(&demo.Options{Immediate: true})
+
+		// Then
+		Expect(err).ToNot(HaveOccurred())
+		Expect(out.String()).To(ContainSubstring("got=hello\n"))
 	})
 })
 
